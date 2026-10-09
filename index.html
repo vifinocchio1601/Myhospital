@@ -370,6 +370,19 @@ var TRAITEMENTS={grippe:"antidouleur",angine:"antibiotique",rhume:"antidouleur",
   infarctus:"anticoagulant",embolie:"anticoagulant",avc:"anticoagulant",septicemie:"antibiotique",meningite:"antibiotique"};
 Object.keys(MALADIES).forEach(function(k){ MALADIES[k].tr=TRAITEMENTS[k]||"repos"; });
 var STOCK_DEPART=8, LOT=10, GROS_LOT=50, REMISE_GROS=0.85, SURCOUT_AUTO=1.15, SEUIL_STOCK=3, DELAI_LIVRAISON=30*MIN, MARGE_HABITUELLE=30;
+// L'argent personnel du directeur : formations, placement en bourse, prêt à l'hôpital, dons et vie personnelle
+var FORMATIONS=[
+  ["oeil","Œil clinique",300,"La liste des diagnostics possibles est réduite à quatre maladies."],
+  ["negociateur","Négociation",500,"Les commandes de la pharmacie coûtent 10 % de moins."],
+  ["recruteur","Recrutement",500,"Cinq candidats au lieu de quatre, et davantage de confirmés et de seniors."],
+  ["meneur","Management",800,"Le moral de toute l'équipe gagne 8 points."],
+  ["gestionnaire","Gestion",1000,"Les charges du bâtiment baissent de 15 %."],
+  ["communicant","Communication",1200,"L'hôpital attire 10 % de patients en plus."]];
+var BIENS=[["velo","Vélo électrique",200],["montre","Belle montre",400],["vacances","Vacances au soleil",800],["voiture","Petite voiture",2000],["berline","Berline",5000],
+  ["appartement","Appartement en ville",10000],["voilier","Voilier",15000],["maison","Maison avec jardin",25000],["villa","Villa au bord de la mer",60000]];
+// Les dons cumulés donnent droit à une plaque, qui améliore un peu la satisfaction de tous les patients
+var PLAQUES=[[500,"Un banc à votre nom",1],[3000,"Une salle à votre nom",2],[10000,"Une aile à votre nom",4]];
+var TAUX_MIN=2, TAUX_MAX=7, TAUX_PRET=5;
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
 var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","pediatrie","rea"];
@@ -397,13 +410,14 @@ var ATOUTS={instruit:"Instruit",contact:"Sens du contact",patient:"Patient",sang
 var EXP=[{nom:"Junior",paie:0.85,qualite:0.88,vitesse:1.15,age:[24,30]},{nom:"Confirmé",f:"Confirmée",paie:1,qualite:1,vitesse:1,age:[30,45]},{nom:"Senior",paie:1.2,qualite:1.12,vitesse:0.85,age:[45,62]}];
 // Livre de comptes : la première lettre du poste donne le type, la suite le service concerné
 var TYPES_D=[["s","Salaires"],["f","Fournitures médicales"],["e","Charges et entretien"],["i","Investissements"],["x","Amendes et intérêts"]];
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["lits","Hospitalisation"],["pharma","Pharmacie"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["lits","Hospitalisation"],["pharma","Pharmacie"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
 var NOMS=["Marchetti","Roche","El Amrani","Vasseur","Lemoine","Bertin","Okafor","Delcourt","Petit","Fontaine","Keller","Novak","Maréchal","Aubry","Vanel","Brunel","Castan","Dufresne","Esteban","Ferrand","Garnier","Haddad","Imbert","Jouvet","Kowalski","Lacombe","Morel","Nguyen","Ostrowski","Perrin","Quentin","Ribeiro","Sorel","Tessier","Urbain","Vidal","Weiss","Yildiz","Zamora","Bellamy"];
 
 /* ------------------------------------------------------------------ État */
+function moiVide(){ return {argent:0,gagne:0,actif:0,tranche:0,formations:{},place:0,taux:4.5,gainsPlace:0,pret:0,interets:0,gainsPret:0,dons:0,biens:{}}; }
 function statVide(){ return {arrives:0,soignes:0,partis:0,transferes:0,renonces:0,sansDiag:0,manque:{},sansSoin:{},ruptures:{}}; }
 function etatInitial(){
   var postes={}, tarifs={lit:REF_LIT}, k;
@@ -414,11 +428,11 @@ function etatInitial(){
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
     avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
-    moi:{argent:0,actif:0,tranche:0},releve:0,prevus:0,decalage:0};
+    moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
 var S=etatInitial();
 // L'état d'écran reste sur l'appareil : il ne fait pas partie de la partie
-var U={ecran:"accueil",role:"generaliste",vue:"jour",decal:0,confirme:null,resume:null,dossier:null,choix:null,trait:null,retour:null,fond:{nom:"",prenom:"Vincent",devise:"$"}};
+var U={ecran:"accueil",role:"generaliste",vue:"jour",decal:0,confirme:null,resume:null,dossier:null,choix:null,trait:null,retour:null,moiVue:"fiche",fond:{nom:"",prenom:"Vincent",devise:"$"}};
 function valide(o){ return !!(o&&o.v===V&&o.postes&&o.tarifs&&o.equipe&&o.patients); }
 function sauver(){ try{ localStorage.setItem(CLE,JSON.stringify(S)); }catch(e){} }
 // Parties commencées avant le diagnostic : on donne une maladie aux patients déjà là
@@ -445,6 +459,8 @@ function migrer(){
     if(S.fondeLe){ noter(S.horloge,"","Le planning arrive : chaque personne travaille maintenant par postes de 8 heures. Vérifiez la tuile Planning."); replanifier(S.horloge); }
   }
   if(!S.releve) S.releve=prochaineReleve(S.horloge||Date.now());
+  // Parties commencées avant les placements : la fiche du directeur reçoit ses nouvelles rubriques
+  if(!S.moi.formations){ var neuf=moiVide(), cle; for(cle in neuf) if(S.moi[cle]===undefined) S.moi[cle]=neuf[cle]; S.moi.gagne=S.moi.argent; }
   S.patients.forEach(function(p){ if(p.etat!=="diag"&&p.trait===undefined){ p.trait=MALADIES[p.mal].tr; p.traitOk=p.diag!=="faux"; p.servi=2; } });
 }
 function charger(){ try{ var t=localStorage.getItem(CLE); if(!t) return null; var o=JSON.parse(t); return valide(o)?o:null; }catch(e){ return null; } }
@@ -496,20 +512,23 @@ function inscrire(t,poste,montant){
   var j=cleJour(t), m=cleMois(t);
   if(!S.cj[j]) S.cj[j]={}; if(!S.cm[m]) S.cm[m]={};
   S.cj[j][poste]=(S.cj[j][poste]||0)+montant; S.cm[m][poste]=(S.cm[m][poste]||0)+montant;
-  S.caisse+=poste.charAt(0)==="r"?montant:-montant;
+  S.caisse+=poste.charAt(0)==="r"||poste.charAt(0)==="p"?montant:-montant;
 }
 function additionner(src,cles){ var tot={}, i, k, o; for(i=0;i<cles.length;i++){ o=src[cles[i]]; if(o) for(k in o) tot[k]=(tot[k]||0)+o[k]; } return tot; }
 function recettesDe(tot){ var k, n=0; for(k in tot) if(k.charAt(0)==="r") n+=tot[k]; return n; }
-function depensesDe(tot){ var k, n=0; for(k in tot) if(k.charAt(0)!=="r") n+=tot[k]; return n; }
+function depensesDe(tot){ var k, n=0; for(k in tot) if("sfeix".indexOf(k.charAt(0))>=0) n+=tot[k]; return n; }
 function typeDe(tot,type){ var k, n=0; for(k in tot) if(k.charAt(0)===type) n+=tot[k]; return n; }
-function serviceDe(tot,sv){ var k, r=0, d=0; for(k in tot) if(k.slice(2)===sv){ if(k.charAt(0)==="r") r+=tot[k]; else d+=tot[k]; } return {r:r,d:d}; }
+function serviceDe(tot,sv){ var k, r=0, d=0; for(k in tot) if(k.slice(2)===sv){ if(k.charAt(0)==="r") r+=tot[k]; else if("sfeix".indexOf(k.charAt(0))>=0) d+=tot[k]; } return {r:r,d:d}; }
 function resultatJour(){ var c=S.cj[cleJour(maintenant())]||{}; return recettesDe(c)-depensesDe(c); }
 function noter(t,classe,texte){ S.journal.unshift({t:t,c:classe,m:texte}); if(S.journal.length>JOURNAL_MAX) S.journal.length=JOURNAL_MAX; }
 
 /* ------------------------------------------------------------------ L'hôpital à un instant donné */
 function reputation(){ var n=0, i; for(i=0;i<S.avis.length;i++) n+=S.avis[i]; return S.avis.length?n/S.avis.length:50; }
 function avis(note){ S.avis.push(borne(Math.round(note),0,100)); if(S.avis.length>AVIS_MAX) S.avis.shift(); }
-function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100); }
+function forme(k){ return !!(S.moi.formations&&S.moi.formations[k]); }
+function bonusPlaque(){ var n=0; PLAQUES.forEach(function(x){ if(S.moi.dons>=x[0]) n=x[2]; }); return n; }
+function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1); }
+function chargesBatiment(){ return Math.round(PALIERS[S.palier].charges*(forme("gestionnaire")?0.85:1)); }
 function nb(role){ var n=0, i; for(i=0;i<S.equipe.length;i++) if(S.equipe[i].role===role) n++; return n; }
 function soignantsDe(sv){ var n=0; SERVICES[sv].roles.forEach(function(r){ n+=nb(r); }); return n; }
 function aDiagnostiquer(){ return S.patients.filter(function(p){ return p.etat==="diag"; }); }
@@ -523,7 +542,7 @@ function produitsConnus(){
 }
 function stockDe(k){ return S.stock[k]||0; }
 function prixVente(k){ return Math.max(PRODUITS[k].cout,Math.round(PRODUITS[k].cout*(1+S.pharma.marge/100))); }
-function prixLot(k,n,auto){ return Math.round(PRODUITS[k].cout*n*(n>=GROS_LOT?REMISE_GROS:1)*(auto?SURCOUT_AUTO:1)); }
+function prixLot(k,n,auto){ return Math.round(PRODUITS[k].cout*n*(n>=GROS_LOT?REMISE_GROS:1)*(auto?SURCOUT_AUTO:1)*(forme("negociateur")?0.9:1)); }
 function enCommande(k){ var n=0; S.commandes.forEach(function(c){ if(c.p===k) n+=c.n; }); return n; }
 function commander(k,n,t,auto){
   var prix=prixLot(k,n,auto);
@@ -564,11 +583,11 @@ function soignantsLe(j,k){ var n=0; S.equipe.forEach(function(e){ if(estSoignant
 // Le moral de chacun dépend de son salaire comparé à l'habitude, du nombre de postes par semaine et du nombre de nuits
 function moralDe(e){
   var n=nbPostes(e), nuits=nbPostes(e,"N"), ratio=S.postes[e.role].salaire/ROLES[e.role].salaire;
-  return Math.round(borne(70+80*(ratio-1)-Math.max(0,n-5)*12+Math.max(0,5-n)*2-Math.max(0,nuits-3)*4,0,100));
+  return Math.round(borne(70+80*(ratio-1)-Math.max(0,n-5)*12+Math.max(0,5-n)*2-Math.max(0,nuits-3)*4+(forme("meneur")?8:0),0,100));
 }
 function moral(role){
   var l=S.equipe.filter(function(e){ return e.role===role; }), n=0;
-  if(!l.length) return Math.round(borne(70+80*(S.postes[role].salaire/ROLES[role].salaire-1),0,100));
+  if(!l.length) return Math.round(borne(70+80*(S.postes[role].salaire/ROLES[role].salaire-1)+(forme("meneur")?8:0),0,100));
   l.forEach(function(e){ n+=moralDe(e); });
   return Math.round(n/l.length);
 }
@@ -600,7 +619,7 @@ function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie);
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=PALIERS[S.palier].charges+S.lits*ENTRETIEN_LIT, k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT, k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 function renoncement(sv,prix){
   var ref=sv==="lit"?REF_LIT:SERVICES[sv].prix, ratio=prix/ref, r;
   if(ratio<=1) return 0;
@@ -615,14 +634,14 @@ function prochainPalier(){ return PALIERS[S.palier+1]||null; }
 /* ------------------------------------------------------------------ Personnes */
 function identite(femme){ return {femme:femme,prenom:tirer(femme?PRENOMS_F:PRENOMS_M),nom:tirer(NOMS)}; }
 function creerCandidat(role){
-  var r=Math.random(), exp=r<0.35?0:r<0.75?1:2, c=identite(Math.random()<0.5), cles=Object.keys(ATOUTS), a=tirer(cles), b=tirer(cles), na=0;
+  var r=Math.random(), exp=forme("recruteur")?(r<0.15?0:r<0.6?1:2):(r<0.35?0:r<0.75?1:2), c=identite(Math.random()<0.5), cles=Object.keys(ATOUTS), a=tirer(cles), b=tirer(cles), na=0;
   while(b===a) b=tirer(cles);
   [a,b].forEach(function(x){ if(ROLES[role].atouts.indexOf(x)>=0) na++; });
   c.id=S.nCandidat++; c.role=role; c.exp=exp; c.age=entre(EXP[exp].age[0],EXP[exp].age[1]); c.atouts=[a,b]; c.na=na;
   return c;
 }
 function candidatsDe(role){
-  if(!S.candidats[role]||!S.candidats[role].length){ S.candidats[role]=[]; for(var i=0;i<4;i++) S.candidats[role].push(creerCandidat(role)); }
+  if(!S.candidats[role]||!S.candidats[role].length){ S.candidats[role]=[]; for(var i=0;i<(forme("recruteur")?5:4);i++) S.candidats[role].push(creerCandidat(role)); }
   return S.candidats[role];
 }
 function creerPatient(t,force){
@@ -712,7 +731,7 @@ function differentiel(p){
     if(n||k===p.mal) l.push({k:k,n:n});
   });
   l.sort(function(a,b){ return b.n-a.n||(a.k===p.mal?-1:b.k===p.mal?1:0); });
-  l=l.slice(0,8);
+  l=l.slice(0,forme("oeil")?4:8);
   l.sort(function(a,b){ return MALADIES[a.k].nom.localeCompare(MALADIES[b.k].nom,"fr"); });
   return l;
 }
@@ -743,6 +762,7 @@ function satisfaction(p,q){
   if(p.rupture) n-=15;
   if(p.servi===1&&S.pharma.marge>MARGE_HABITUELLE) n-=(S.pharma.marge-MARGE_HABITUELLE)*0.15;
   n-=(p.inutiles||0)*5;
+  n+=bonusPlaque();
   if(p.imagerie&&ri>1) n-=(ri-1)*20*p.imagerie;
   return borne(n,0,100);
 }
@@ -836,14 +856,26 @@ function declencher(t){
   S.arrivees.sort(function(a,b){ return a.t-b.t; });
 }
 // À minuit : paie, charges, journées d'hospitalisation, démissions, puis préparation de la journée suivante
+// Chaque nuit : le portefeuille d'actions rapporte entre 2 % et 7 % par an (le taux bouge un peu chaque jour),
+// et l'hôpital verse au directeur les intérêts de ce qu'il lui a prêté.
+function financesPerso(t){
+  var M=S.moi, gain, entier;
+  M.taux=borne(M.taux+(4.5-M.taux)*0.08+alea(-0.6,0.6),TAUX_MIN,TAUX_MAX);
+  if(M.place>0){ gain=M.place*M.taux/100/365; M.place+=gain; M.gainsPlace+=gain; }
+  if(M.pret>0){
+    M.interets+=M.pret*TAUX_PRET/100/365; entier=Math.floor(M.interets);
+    if(entier>=1){ inscrire(t,"x:pret",entier); M.argent+=entier; M.gainsPret+=entier; M.interets-=entier; }
+  }
+}
 function cloturer(t){
   var tj=t-1000, k, c, res, garde, vieux;
   S.equipe.forEach(function(e){ inscrire(tj,"s:"+ROLES[e.role].service,paiePoste(e,e.plan[jourSemaine(tj)])); });
-  inscrire(tj,"e:batiment",PALIERS[S.palier].charges);
+  inscrire(tj,"e:batiment",chargesBatiment());
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT);
   S.patients.forEach(function(p){ if(p.etat==="lit"){ inscrire(tj,"r:lits",S.tarifs.lit); p.paye+=S.tarifs.lit; } });
   if(S.caisse<0) inscrire(tj,"x:divers",Math.max(1,-S.caisse*TAUX_DECOUVERT));
+  financesPerso(tj);
   S.equipe.slice().forEach(function(e){
     var m=moralDe(e);
     if(m<30&&!e.occupe&&Math.random()<(30-m)/100){
@@ -900,7 +932,7 @@ function activite(ms){
   var paye=false;
   S.moi.actif+=ms; S.moi.tranche+=ms;
   while(S.moi.tranche>=TRANCHE){
-    S.moi.tranche-=TRANCHE; S.moi.argent+=PAIE_DIRECTEUR; inscrire(maintenant(),"s:direction",PAIE_DIRECTEUR); paye=true;
+    S.moi.tranche-=TRANCHE; S.moi.argent+=PAIE_DIRECTEUR; S.moi.gagne+=PAIE_DIRECTEUR; inscrire(maintenant(),"s:direction",PAIE_DIRECTEUR); paye=true;
   }
   return paye;
 }
@@ -1038,7 +1070,7 @@ function ecranAccueil(){
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
     +tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances")
     +tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal")
-    +tuile("g8","moi","Ma fiche",mt(S.moi.argent)+" gagnés","moi")
+    +tuile("g8","moi","Ma fiche",mt(S.moi.argent)+" à vous","moi")
     +'</div>'
     +palierHtml()
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
@@ -1250,6 +1282,10 @@ function ecranFinances(){
   TYPES_D.forEach(function(c){ var x=typeDe(T,c[0]), y=typeDe(A,c[0]); if(x||y) lignes+=rang(c[1],cel(x),cel(y)); });
   lignes+=rang("Total des dépenses",mt(dT),mt(dA),"total");
   lignes+='<tr class="total"><td>Résultat</td><td class="'+(rT-dT>=0?"plus-c":"moins-c")+'">'+signeM(rT-dT)+'</td><td class="avant">'+signeM(rA-dA)+'</td></tr>';
+  if(T["p:pret"]||T["q:pret"]||A["p:pret"]||A["q:pret"]){
+    lignes+='<tr class="sous"><td colspan="3">Financement</td></tr>'+rang("Prêts du directeur",cel(T["p:pret"]||0),cel(A["p:pret"]||0))+rang("Remboursements au directeur",cel(T["q:pret"]||0),cel(A["q:pret"]||0))
+      +rang("Variation de la caisse",signeM(rT-dT+(T["p:pret"]||0)-(T["q:pret"]||0)),signeM(rA-dA+(A["p:pret"]||0)-(A["q:pret"]||0)),"total");
+  }
   COMPTES_SERVICES.forEach(function(c){
     var s=serviceDe(T,c[0]); if(!s.r&&!s.d) return;
     services+='<tr><td>'+c[1]+'</td><td>'+(s.r?nombre(s.r):"–")+'</td><td>'+(s.d?nombre(s.d):"–")+'</td><td class="'+(s.r-s.d>=0?"plus-c":"moins-c")+'">'+(s.r-s.d>0?"+":s.r-s.d<0?"−":"")+nombre(Math.abs(s.r-s.d))+'</td></tr>';
@@ -1266,13 +1302,49 @@ function ecranJournal(){
     +(S.journal.length?'<div class="carte"><ul class="journal">'+S.journal.map(function(j){ return '<li><time>'+dateCourte(j.t)+' · '+heureTxt(j.t)+'</time><span class="'+(j.c||"")+'">'+h(j.m)+'</span></li>'; }).join("")+'</ul></div>':'<p class="vide">Rien à signaler pour le moment.</p>');
 }
 function resteActivite(){ return dureeTxt(TRANCHE-S.moi.tranche); }
+function mt2(n){ return n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" "+S.devise; }
+function ligne(nom,valeur){ return '<div class="reglage"><span>'+nom+'</span><b>'+valeur+'</b></div>'; }
+function bouton(action,k,d,nom,ok,principal){ return '<button type="button" class="btn petit'+(principal?" principal":"")+'" data-a="'+action+'" data-k="'+k+'" data-d="'+d+'"'+(ok?"":" disabled")+'>'+nom+'</button>'; }
 function ecranMoi(){
-  return barre()+entete(S.prenom,"Directeur de "+h(S.nom))
-    +'<div class="jauges">'+jauge("Argent gagné",mt(S.moi.argent),"",null,"Depuis la fondation")+jauge("Temps de jeu",dureeTxt(S.moi.actif),"",null,"Écran allumé sur le jeu")+'</div>'
-    +'<div class="carte"><div class="carte-haut"><h3>Votre salaire<small>'+mt(PAIE_DIRECTEUR)+' toutes les 20 minutes passées sur le jeu, payés par l\'hôpital.</small></h3></div>'
-    +'<div class="progres nn"><div class="progres-haut"><b>Prochain versement</b><span>dans <span id="paie-reste">'+resteActivite()+'</span></span></div><div class="piste"><div class="plein" style="width:'+borne(S.moi.tranche/TRANCHE*100,0,100)+'%"></div></div></div></div>'
-    +'<div class="carte"><h2>Vos diagnostics</h2><p>'+(S.diag.ok+S.diag.faux?S.diag.ok+" justes sur "+(S.diag.ok+S.diag.faux)+" posés par vous.":"Vous n'avez encore posé aucun diagnostic.")+(S.diag.auto?" Vos médecins en ont posé "+S.diag.auto+", dont "+pl(S.diag.autoFaux,"erreur","erreurs")+".":"")+'</p></div>'
-    +'<div class="carte"><h2>Votre hôpital</h2><p>Fondé le '+new Date(S.fondeLe).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+'. '+pl(S.soignes,"patient soigné","patients soignés")+' depuis l\'ouverture.</p></div>';
+  var M=S.moi, v=U.moiVue||"fiche", total=M.argent+M.place+M.pret, nbBiens=BIENS.filter(function(x){ return M.biens[x[0]]; }).length, corps, plaque=null, suivante=null;
+  function onglet(k,nom){ return '<button type="button" class="onglet'+(v===k?" actif":"")+'" data-a="moivue" data-k="'+k+'">'+nom+'</button>'; }
+  PLAQUES.forEach(function(x){ if(M.dons>=x[0]) plaque=x; else if(!suivante) suivante=x; });
+  if(v==="formations"){
+    corps='<p class="aide">Vous payez ces formations avec votre propre argent. Elles sont acquises pour toujours.</p>'
+      +FORMATIONS.map(function(f){
+        return '<div class="carte"><div class="carte-haut"><h3>'+f[1]+'<small>'+f[3]+'</small></h3>'+(forme(f[0])?'<span class="puce ok">Acquise</span>':'<span class="puce num">'+mt(f[2])+'</span>')+'</div>'
+          +(forme(f[0])?"":'<div class="actions"><button type="button" class="btn principal" data-a="former" data-k="'+f[0]+'"'+(M.argent>=f[2]?"":" disabled")+'>Suivre la formation</button>'+(M.argent>=f[2]?"":'<span class="aide">Il vous manque '+mt(f[2]-M.argent)+'.</span>')+'</div>')+'</div>';
+      }).join("");
+  } else if(v==="argent"){
+    corps='<div class="carte"><div class="carte-haut"><h3>Portefeuille d\'actions<small>Rapporte entre '+TAUX_MIN+' % et '+TAUX_MAX+' % par an. Le taux bouge un peu chaque jour.</small></h3></div>'
+      +ligne("Valeur du portefeuille",mt2(M.place))+ligne("Rendement du moment",M.taux.toLocaleString("fr-FR",{minimumFractionDigits:1,maximumFractionDigits:1})+" % par an")+ligne("Gains depuis le début",mt2(M.gainsPlace))
+      +'<div class="actions">'+bouton("placer","in",100,"Placer 100",M.argent>=100,true)+bouton("placer","in",1000,"Placer 1 000",M.argent>=1000,true)+bouton("placer","in","tout","Tout placer",M.argent>=1,true)+'</div>'
+      +'<div class="actions">'+bouton("placer","out",100,"Retirer 100",M.place>=100)+bouton("placer","out",1000,"Retirer 1 000",M.place>=1000)+bouton("placer","out","tout","Tout retirer",M.place>0)+'</div></div>'
+      +'<div class="carte"><div class="carte-haut"><h3>Prêt à l\'hôpital<small>L\'hôpital vous verse '+TAUX_PRET+' % par an. Utile quand la caisse est à sec.</small></h3></div>'
+      +ligne("Prêté à l'hôpital",mt(M.pret))+ligne("Intérêts reçus",mt(M.gainsPret))+ligne("Caisse de l'hôpital",mt(S.caisse))
+      +'<div class="actions">'+bouton("preter","in",500,"Prêter 500",M.argent>=500,true)+bouton("preter","in",2000,"Prêter 2 000",M.argent>=2000,true)+bouton("preter","out",500,"Reprendre 500",M.pret>=500&&S.caisse>=500)+bouton("preter","out","tout","Tout reprendre",M.pret>0&&S.caisse>=M.pret)+'</div></div>'
+      +'<div class="carte"><div class="carte-haut"><h3>Dons à l\'hôpital<small>Un don entre dans la caisse et fait monter la réputation.</small></h3>'+(plaque?'<span class="puce ok">'+plaque[1]+'</span>':"")+'</div>'
+      +ligne("Total de vos dons",mt(M.dons))
+      +(suivante?'<div class="progres nn"><div class="progres-haut"><b>'+suivante[1]+'</b><span>'+mt(Math.min(M.dons,suivante[0]))+' / '+mt(suivante[0])+'</span></div><div class="piste"><div class="plein" style="width:'+borne(M.dons/suivante[0]*100,0,100)+'%"></div></div></div>':"")
+      +'<p class="aide">Une plaque à votre nom améliore un peu la satisfaction de tous les patients.</p>'
+      +'<div class="actions">'+bouton("donner","",200,"Donner 200",M.argent>=200,true)+bouton("donner","",1000,"Donner 1 000",M.argent>=1000,true)+'</div></div>';
+  } else if(v==="achats"){
+    corps='<p class="aide">Votre vie en dehors de l\'hôpital : '+nbBiens+' sur '+BIENS.length+'.</p><ul class="liste">'+BIENS.map(function(b){
+      var a=M.biens[b[0]];
+      return '<li class="rang"><div><b>'+b[1]+'</b><small>'+mt(b[2])+'</small></div><div class="droite">'+(a?'<span class="puce ok">À vous</span>':'<button type="button" class="btn petit principal" data-a="acheter" data-k="'+b[0]+'"'+(M.argent>=b[2]?"":" disabled")+'>Acheter</button>')+'</div></li>';
+    }).join("")+'</ul>';
+  } else {
+    corps='<div class="jauges">'+jauge("Argent disponible",mt(M.argent),"",null,"Gagné en tout : "+mt(M.gagne))+jauge("Patrimoine",mt(total),"",null,nbBiens+" "+(nbBiens>1?"biens":"bien")+" sur "+BIENS.length)+'</div>'
+      +'<div class="carte"><div class="carte-haut"><h3>Votre salaire<small>'+mt(PAIE_DIRECTEUR)+' toutes les 20 minutes passées sur le jeu, payés par l\'hôpital.</small></h3></div>'
+      +'<div class="progres nn"><div class="progres-haut"><b>Prochain versement</b><span>dans <span id="paie-reste">'+resteActivite()+'</span></span></div><div class="piste"><div class="plein" style="width:'+borne(M.tranche/TRANCHE*100,0,100)+'%"></div></div></div>'
+      +ligne("Temps de jeu",dureeTxt(M.actif))+'</div>'
+      +'<div class="carte"><h2>Votre argent</h2>'+ligne("Disponible",mt(M.argent))+ligne("Placé en actions",mt2(M.place))+ligne("Prêté à l'hôpital",mt(M.pret))+ligne("Donné à l'hôpital",mt(M.dons))
+      +ligne("Formations suivies",FORMATIONS.filter(function(f){ return forme(f[0]); }).length+" sur "+FORMATIONS.length)+'</div>'
+      +'<div class="carte"><h2>Vos diagnostics</h2><p>'+(S.diag.ok+S.diag.faux?S.diag.ok+" justes sur "+(S.diag.ok+S.diag.faux)+" posés par vous.":"Vous n'avez encore posé aucun diagnostic.")+(S.diag.auto?" Vos médecins en ont posé "+S.diag.auto+", dont "+pl(S.diag.autoFaux,"erreur","erreurs")+".":"")+'</p></div>'
+      +'<div class="carte"><h2>Votre hôpital</h2><p>Fondé le '+new Date(S.fondeLe).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+'. '+pl(S.soignes,"patient soigné","patients soignés")+' depuis l\'ouverture.'+(plaque?' '+plaque[1]+'.':"")+'</p></div>';
+  }
+  return barre()+entete(S.prenom,"Directeur de "+h(S.nom)+" · "+mt(M.argent)+" disponibles")
+    +'<div class="onglets">'+onglet("fiche","Fiche")+onglet("formations","Formations")+onglet("argent","Argent")+onglet("achats","Achats")+'</div>'+corps;
 }
 function ecranReglages(){
   var etat=nuage.ref?"Votre partie est enregistrée sur votre compte : vous la retrouvez sur votre téléphone comme sur votre ordinateur.":"Votre partie est enregistrée sur cet appareil.";
@@ -1288,6 +1360,7 @@ function ecranReglages(){
     +'<p class="aide"><b>Réputation.</b> Elle suit la satisfaction des derniers patients : attente, qualité du soignant, prix, accueil, propreté. Une bonne réputation attire plus de patients.</p>'
     +'<p class="aide"><b>Équipe.</b> Le salaire se règle par métier, pour un poste de 8 heures. Mal payée ou surchargée, une personne perd le moral, soigne moins bien et finit par démissionner.</p>'
     +'<p class="aide"><b>Planning.</b> Chaque personne a sa semaine type : matin (6 h à 14 h), après-midi (14 h à 22 h), nuit (22 h à 6 h) ou repos. On ne paie que les postes travaillés. Un service ne reçoit des patients que pendant les postes où il a du personnel.</p>'
+    +'<p class="aide"><b>Votre argent.</b> Votre salaire vous appartient. Dans Ma fiche, vous pouvez suivre des formations, le placer en actions, le prêter à l\'hôpital, faire des dons ou vous offrir une vie en dehors de l\'hôpital.</p>'
     +'<p class="aide"><b>Paliers.</b> Cabinet médical, Clinique, Hôpital, CHU. Chaque palier débloque des services et rapporte une subvention.</p>'
     +'<p class="aide"><b>Argent.</b> L\'hôpital ne peut pas faire faillite. À découvert, la banque prélève 0,2 % par jour et les achats sont bloqués.</p></div>'
     +'<div class="carte"><h2>Recommencer</h2><p class="aide">Efface cette partie et repart d\'un cabinet vide.</p><div class="actions"><button type="button" class="btn danger" data-a="recommencer">'+(U.confirme==="recommencer"?"Confirmer : tout effacer":"Recommencer une partie")+'</button></div></div>';
@@ -1378,6 +1451,43 @@ var A={
   vue:function(d){ U.vue=d.k; U.decal=0; return false; },
   decal:function(d){ U.decal=Math.min(0,U.decal+(+d.d)); return false; },
   resume:function(){ U.resume=null; return false; },
+  moivue:function(d){ U.moiVue=d.k; return false; },
+  former:function(d){
+    var f=FORMATIONS.filter(function(x){ return x[0]===d.k; })[0];
+    if(!f||forme(f[0])||S.moi.argent<f[2]) return false;
+    S.moi.argent-=f[2]; S.moi.formations[f[0]]=1;
+    noter(maintenant(),"ok",S.prenom+" suit la formation « "+f[1]+" ».");
+    if(f[0]==="communicant") replanifier(maintenant());
+    return true;
+  },
+  placer:function(d){
+    var M=S.moi, n=d.d==="tout"?(d.k==="in"?Math.floor(M.argent):M.place):+d.d;
+    if(!(n>0)) return false;
+    if(d.k==="in"){ if(M.argent<n) return false; M.argent-=n; M.place+=n; }
+    else { if(M.place<n) return false; M.place-=n; M.argent+=n; if(M.place<0.005) M.place=0; }
+    return true;
+  },
+  preter:function(d){
+    var M=S.moi, t=maintenant(), n=d.d==="tout"?M.pret:+d.d;
+    if(!(n>0)) return false;
+    if(d.k==="in"){ if(M.argent<n) return false; M.argent-=n; M.pret+=n; inscrire(t,"p:pret",n); noter(t,"",S.prenom+" prête "+mt(n)+" à l'hôpital."); }
+    else { if(M.pret<n||S.caisse<n) return false; M.pret-=n; M.argent+=n; inscrire(t,"q:pret",n); noter(t,"","L'hôpital rembourse "+mt(n)+" à "+S.prenom+"."); }
+    return true;
+  },
+  donner:function(d){
+    var M=S.moi, t=maintenant(), n=+d.d, avant=bonusPlaque(), i, obtenue;
+    if(!(n>0)||M.argent<n) return false;
+    M.argent-=n; M.dons+=n; inscrire(t,"r:divers",n);
+    for(i=0;i<Math.min(5,Math.round(n/200));i++) avis(92);
+    obtenue=bonusPlaque()>avant?PLAQUES.filter(function(x){ return M.dons>=x[0]; }).pop():null;
+    noter(t,"ok",S.prenom+" fait un don de "+mt(n)+" à l'hôpital."+(obtenue?" L'hôpital inaugure « "+obtenue[1].toLowerCase()+" ».":""));
+    return true;
+  },
+  acheter:function(d){
+    var b=BIENS.filter(function(x){ return x[0]===d.k; })[0];
+    if(!b||S.moi.biens[b[0]]||S.moi.argent<b[2]) return false;
+    S.moi.argent-=b[2]; S.moi.biens[b[0]]=1; return true;
+  },
   recommencer:function(){
     if(U.confirme!=="recommencer"){ U.confirme="recommencer"; return false; }
     U.confirme=null; U.resume=null; U.ecran="accueil"; S=etatInitial();
@@ -1502,6 +1612,7 @@ function demarrer(donnees){
   if(donnees&&donnees.U) U=donnees.U;
   if(!("retour" in U)){ U.dossier=null; U.choix=null; U.retour=null; }
   if(!("trait" in U)) U.trait=null;
+  if(!U.moiVue) U.moiVue="fiche";
   if(repris){
     S=repris; migrer();
     avant={t:S.horloge,soignes:S.soignes,caisse:S.caisse,rep:reputation()};
