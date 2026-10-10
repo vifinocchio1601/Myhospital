@@ -401,6 +401,9 @@ var GROUPES_PLANNING=[
   ["medecins","Médecins","Médecins prévus",["generaliste","chef","urgentiste","radiologue","chirurgien","pediatre","reanimateur"]],
   ["infirmiers","Infirmiers","Infirmiers prévus",["infirmier","sagefemme"]],
   ["autres","Autres","Accueil et entretien prévus",["secretaire","agent"]]];
+// Absences : chaque nuit, une personne peut tomber malade (1 à 3 jours) ou demander un congé (2 à 5 jours, dans 3 jours).
+// Une personne absente reste payée. Un intérimaire peut la remplacer sur ses postes, pour 1,5 fois le salaire du métier.
+var TAUX_MALADIE=0.02, TAUX_CONGE=0.012, PRIME_INTERIM=1.5, DELAI_CONGE=3, QUALITE_INTERIM=1.06;
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
 var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","pediatrie","rea"];
@@ -444,7 +447,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -457,6 +460,7 @@ function sauver(){ try{ localStorage.setItem(CLE,JSON.stringify(S)); }catch(e){}
 function migrer(){
   if(!S.diag) S.diag={ok:0,faux:0,auto:0,autoFaux:0};
   if(!S.materiel) S.materiel={};
+  if(!S.demandes){ S.demandes=[]; S.nDemande=1; }
   S.equipe.forEach(function(e){ if(e.xp===undefined) e.xp=Math.min(SEUILS_XP[e.exp]+(e.soignes||0),e.exp<2?SEUILS_XP[e.exp+1]-1:SEUILS_XP[2]); });
   S.patients=S.patients.filter(function(p){
     var e, l;
@@ -503,6 +507,7 @@ function deux(n){ return (n<10?"0":"")+n; }
 function cleJour(t){ var d=new Date(t); return d.getFullYear()+"-"+deux(d.getMonth()+1)+"-"+deux(d.getDate()); }
 function cleMois(t){ var d=new Date(t); return d.getFullYear()+"-"+deux(d.getMonth()+1); }
 function heureTxt(t){ var d=new Date(t); return deux(d.getHours())+":"+deux(d.getMinutes()); }
+function dateLongue(t){ return new Date(t).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}); }
 function dateCourte(t){ return new Date(t).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"}); }
 function horlogeTxt(t){ var d=new Date(t); return dateCourte(t)+" · "+deux(d.getHours())+":"+deux(d.getMinutes())+":"+deux(d.getSeconds()); }
 function quandTxt(t){ return (cleJour(t)===cleJour(maintenant())?"":dateCourte(t)+" · ")+heureTxt(t); }
@@ -514,6 +519,7 @@ function dureeTxt(ms){
   return s+" s";
 }
 function resteTxt(fin){ return dureeTxt(fin-maintenant()); }
+function jourApres(t,n){ var d=new Date(t); return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n).getTime(); }
 function jourSemaine(t){ return (new Date(t).getDay()+6)%7; }
 // Le poste en cours : j est le jour du planning (0 = lundi). Avant 6 h, c'est encore la nuit de la veille.
 function posteDe(t){ var d=new Date(t), hh=d.getHours(), j=(d.getDay()+6)%7; return hh<6?{j:(j+6)%7,k:"N"}:{j:j,k:hh<14?"M":hh<22?"A":"N"}; }
@@ -599,18 +605,28 @@ function couvAccueil(){ return Math.min(1,auTravail("secretaire")*PAR_SECRETAIRE
 function couvProprete(){ return Math.min(1,auTravail("agent")*PAR_AGENT*(1+0.25*niv("entretien"))/Math.max(1,(S.prevus||0)+S.lits)); }
 function couvLits(){ var o=alites().length; return o?Math.min(1,auTravail("infirmier")*LITS_PAR_INFIRMIER/o):1; }
 // Le moral d'un métier dépend du salaire horaire comparé à l'habitude, et de la longueur des journées
-function enPoste(e,t){ var q=posteDe(t===undefined?S.horloge:t); return !!e.plan&&e.plan[q.j]===q.k; }
+function absentLe(e,t){ return !!(e.absent&&t>=e.absent.debut&&t<e.absent.fin); }
+// Vrai quand c'est un intérimaire qui tient le poste de la personne
+function remplace(e,t){ return absentLe(e,t===undefined?S.horloge:t)&&!!e.absent.interim; }
+function present(e,t){ return !absentLe(e,t)||!!e.absent.interim; }
+function enPoste(e,t){
+  var q;
+  t=t===undefined?S.horloge:t; q=posteDe(t);
+  return !!e.plan&&e.plan[q.j]===q.k&&present(e,t);
+}
+function humeur(e){ return e.humeur&&S.horloge<e.humeur.fin?e.humeur.v:0; }
+function paieInterim(e,k){ return k==="R"?0:Math.round(S.postes[e.role].salaire*PRIME_INTERIM*(k==="N"?PRIME_NUIT:1)); }
 function estSoignant(e){ return ROLES[e.role].service!=="admin"; }
 function enPosteMaintenant(){ var n=0; S.equipe.forEach(function(e){ if(estSoignant(e)&&enPoste(e)) n++; }); return n; }
 // Ceux d'un métier qui travaillent aujourd'hui, quel que soit leur poste
-function auTravail(role){ var j=posteDe(S.horloge).j, n=0; S.equipe.forEach(function(e){ if(e.role===role&&e.plan[j]!=="R") n++; }); return n; }
+function auTravail(role){ var j=posteDe(S.horloge).j, n=0; S.equipe.forEach(function(e){ if(e.role===role&&e.plan[j]!=="R"&&present(e,S.horloge)) n++; }); return n; }
 function nbPostes(e,k){ var n=0; e.plan.forEach(function(x){ if(k?x===k:x!=="R") n++; }); return n; }
-function prevusLe(sv,j,k){ var n=0; S.equipe.forEach(function(e){ if(SERVICES[sv].roles.indexOf(e.role)>=0&&e.plan[j]===k) n++; }); return n; }
-function soignantsLe(j,k){ var n=0; S.equipe.forEach(function(e){ if(estSoignant(e)&&e.plan[j]===k) n++; }); return n; }
+function prevusLe(sv,j,k,t){ var n=0; S.equipe.forEach(function(e){ if(SERVICES[sv].roles.indexOf(e.role)>=0&&e.plan[j]===k&&(!t||present(e,t))) n++; }); return n; }
+function soignantsLe(j,k,t){ var n=0; S.equipe.forEach(function(e){ if(estSoignant(e)&&e.plan[j]===k&&(!t||present(e,t))) n++; }); return n; }
 // Le moral de chacun dépend de son salaire comparé à l'habitude, du nombre de postes par semaine et du nombre de nuits
 function moralDe(e){
   var n=nbPostes(e), nuits=nbPostes(e,"N"), ratio=S.postes[e.role].salaire/ROLES[e.role].salaire;
-  return Math.round(borne(70+80*(ratio-1)-Math.max(0,n-5)*12+Math.max(0,5-n)*2-Math.max(0,nuits-3)*4+(forme("meneur")?8:0),0,100));
+  return Math.round(borne(70+80*(ratio-1)-Math.max(0,n-5)*12+Math.max(0,5-n)*2-Math.max(0,nuits-3)*4+(forme("meneur")?8:0)+humeur(e),0,100));
 }
 function moral(role){
   var l=S.equipe.filter(function(e){ return e.role===role; }), n=0;
@@ -638,7 +654,7 @@ function planAuto(e){
   return plan;
 }
 function qualite(e){
-  var q=(EXP[e.exp].qualite+0.04*e.na)*(0.85+0.3*moralDe(e)/100);
+  var q=remplace(e)?QUALITE_INTERIM:(EXP[e.exp].qualite+0.04*e.na)*(0.85+0.3*moralDe(e)/100);
   if(e.role!=="chef"&&nb("chef")) q+=0.05;
   return q;
 }
@@ -779,7 +795,7 @@ function affecter(t){
     var sv=SERVICES[p.sv], dispo=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&libre(e); }), e, d;
     if(!dispo.length) return;
     dispo.sort(function(a,b){ return qualite(b)-qualite(a); });
-    e=dispo[0]; d=Math.max(5,Math.round(sv.duree*EXP[e.exp].vitesse*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)*(p.sv==="chirurgie"?1-0.15*niv("bloc"):1)));
+    e=dispo[0]; d=Math.max(5,Math.round(sv.duree*(remplace(e,t)?1:EXP[e.exp].vitesse)*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)*(p.sv==="chirurgie"?1-0.15*niv("bloc"):1)));
     p.etat="soin"; p.debut=t; p.fin=t+d*MIN; p.soignant=e.id; p.attente=Math.round((t-p.arrive)/MIN);
     e.occupe=p.id; e.minutes+=d;
     // Le traitement sort du stock au début des soins. En rupture, le patient est soigné sans, et il s'en souvient.
@@ -805,7 +821,7 @@ function satisfaction(p,q){
 }
 function finSoin(p,t){
   var sv=SERVICES[p.sv], part=MALADIES[p.mal].p||1, e=parId(S.equipe,p.soignant), prix=Math.round(S.tarifs[p.sv]*part), note;
-  if(e){ e.occupe=null; e.soignes=(e.soignes||0)+1; gagnerXp(e,1,t); }
+  if(e){ e.occupe=null; e.soignes=(e.soignes||0)+1; if(!remplace(e,t)) gagnerXp(e,1,t); }
   inscrire(t,"r:"+p.sv,prix); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
   p.paye+=prix; S.soignes++; S.stat.soignes++;
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
@@ -839,7 +855,7 @@ function planifierJour(debut,apres,nuitSeule){
     svs.forEach(function(sv){
       var l=Object.keys(MALADIES).filter(function(x){ return MALADIES[x].sv===sv; }), n, i, t;
       // Un service pas encore ouvert envoie quand même ses patients en journée : ils seront dirigés ailleurs
-      if(S.ouverts[sv]?!prevusLe(sv,j,F[0]):(F[0]==="N"||!soignantsLe(j,F[0]))) return;
+      if(S.ouverts[sv]?!prevusLe(sv,j,F[0],debut+(F[1]+1)*HEURE):(F[0]==="N"||!soignantsLe(j,F[0],debut+(F[1]+1)*HEURE))) return;
       n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1); n=Math.floor(n)+(Math.random()<n%1?1:0);
       for(i=0;i<n;i++){ t=debut+Math.round(alea(F[1],F[2])*HEURE); if(t>apres){ S.arrivees.push({t:t,mal:tirer(l)}); compte++; } }
     });
@@ -904,12 +920,41 @@ function financesPerso(t){
     if(entier>=1){ inscrire(t,"x:pret",entier); M.argent+=entier; M.gainsPret+=entier; M.interets-=entier; }
   }
 }
+// Chaque nuit : retours d'absence, congés qui commencent, nouveaux malades et nouvelles demandes de congé
+function partirEnConge(e,d,t,sansReponse){
+  if(absentLe(e,t)) e.absent.fin=Math.max(e.absent.fin,d.fin); else e.absent={debut:d.debut,fin:d.fin,motif:"conge"};
+  e.humeur={v:5,fin:jourApres(t,10)};
+  if(sansReponse) noter(t,"",nomComplet(e)+" part en congé jusqu'au "+dateLongue(d.fin-1000)+" : sa demande est restée sans réponse.");
+}
+function absences(t){
+  S.equipe.forEach(function(e){ if(e.absent&&e.absent.fin<=t) e.absent=null; });
+  S.demandes=S.demandes.filter(function(d){
+    var e=parId(S.equipe,d.qui);
+    if(!e) return false;
+    if(d.debut<=t){ partirEnConge(e,d,t,true); return false; }
+    return true;
+  });
+  if(!S.portes) return;
+  S.equipe.forEach(function(e){
+    var n, debut;
+    if(e.absent) return;
+    if(Math.random()<TAUX_MALADIE*(moralDe(e)<40?2:1)){
+      n=entre(1,3); e.absent={debut:t,fin:jourApres(t,n),motif:"maladie"};
+      noter(t,"warn",nomComplet(e)+" ("+nomRole(e).toLowerCase()+") est malade : "+pl(n,"jour","jours")+" d'absence.");
+    } else if(!S.demandes.some(function(d){ return d.qui===e.id; })&&Math.random()<TAUX_CONGE){
+      n=entre(2,5); debut=jourApres(t,DELAI_CONGE);
+      S.demandes.push({id:S.nDemande++,qui:e.id,debut:debut,fin:jourApres(debut,n),jours:n});
+      noter(t,"",nomComplet(e)+" ("+nomRole(e).toLowerCase()+") demande "+n+" jours de congé à partir du "+dateLongue(debut)+".");
+    }
+  });
+}
 function cloturer(t){
   var tj=t-1000, k, c, res, garde, vieux;
   S.equipe.forEach(function(e){
-    var k=e.plan[jourSemaine(tj)];
+    var k=e.plan[jourSemaine(tj)], abs=absentLe(e,tj);
     inscrire(tj,"s:"+ROLES[e.role].service,paiePoste(e,k));
-    if(k!=="R") gagnerXp(e,estSoignant(e)?XP_POSTE_SOIGNANT:XP_POSTE_AUTRE,tj);
+    if(abs&&e.absent.interim) inscrire(tj,"s:"+ROLES[e.role].service,paieInterim(e,k));
+    if(k!=="R"&&!abs) gagnerXp(e,estSoignant(e)?XP_POSTE_SOIGNANT:XP_POSTE_AUTRE,tj);
   });
   inscrire(tj,"e:batiment",chargesBatiment());
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
@@ -932,6 +977,7 @@ function cloturer(t){
   garde=cleJour(t-JOURS_GARDES*JOUR);
   for(vieux in S.cj) if(vieux<garde) delete S.cj[vieux];
   monterPalier(t);
+  absences(t);
   if(S.portes){ planifierJour(t,t); planifierEvenement(t); }
   affecter(t); reappro(t);
 }
@@ -1039,6 +1085,9 @@ function alertes(){
   function a(classe,texte,cible,bouton){ l.push('<div class="alerte '+classe+'"><span>'+texte+'</span>'+(cible?'<button type="button" class="btn petit" data-a="aller" data-e="'+cible+'">'+bouton+'</button>':'')+'</div>'); }
   if(!S.portes){ a("","Engagez un médecin généraliste ou un infirmier : le cabinet ouvrira ses portes aussitôt.","recrutement","Recruter"); return l.join(""); }
   if(!enPosteMaintenant()) a("warn","Aucun soignant n'est en poste en ce moment ("+POSTES[posteDe(S.horloge).k].nom.toLowerCase()+"). Les patients que vous faites entrer attendront.","planning","Voir le planning");
+  if(S.demandes.length) a("",pl(S.demandes.length,"demande de congé attend","demandes de congé attendent")+" votre réponse.","planning","Voir le planning");
+  n=S.equipe.filter(function(e){ return absentLe(e,S.horloge)&&!e.absent.interim; }).map(function(e){ return nomComplet(e)+" ("+(e.absent.motif==="maladie"?"malade":"en congé")+")"; });
+  if(n.length) a("warn",(n.length>1?"Absents aujourd'hui : ":"Absence aujourd'hui : ")+n.join(", ")+".","planning","Voir le planning");
   n=aDiagnostiquer().length;
   if(n) a("",pl(n,"patient attend","patients attendent")+" votre diagnostic.","patients","Voir les patients");
   if(S.stat.sansDiag) a("warn",pl(S.stat.sansDiag,"patient est reparti","patients sont repartis")+" sans diagnostic aujourd'hui."+(meilleurMedecin()?"":" Sans médecin en poste, vous seul pouvez les diagnostiquer."),"patients","Voir les patients");
@@ -1200,7 +1249,29 @@ function ecranMaladies(){
 function etatSoignant(e){
   var p;
   if(e.occupe){ p=parId(S.patients,e.occupe); return '<span class="puce info">En soin'+(p?' · <span data-reste="'+p.fin+'">'+resteTxt(p.fin)+'</span>':"")+'</span>'; }
+  if(absentLe(e,S.horloge)) return '<span class="puce warn">'+(e.absent.motif==="maladie"?"Malade":"En congé")+(e.absent.interim?" · remplacé":"")+'</span>';
   return enPoste(e)?'<span class="puce ok">En poste</span>':'<span class="puce">Hors poste</span>';
+}
+function absenceTxt(e){
+  var a=e.absent, t=maintenant();
+  if(a.motif==="maladie") return "Malade jusqu'au "+dateCourte(a.fin-1000)+" inclus";
+  return (a.debut>t?"En congé du "+dateCourte(a.debut)+" au ":"En congé jusqu'au ")+dateCourte(a.fin-1000)+(a.debut>t?"":" inclus");
+}
+function absencesHtml(){
+  var lignes="";
+  S.demandes.forEach(function(d){
+    var e=parId(S.equipe,d.qui); if(!e) return;
+    lignes+='<li class="rang"><div><b>'+h(nomComplet(e))+'</b><small>'+nomRole(e)+' · demande '+d.jours+' jours de congé, du '+dateCourte(d.debut)+' au '+dateCourte(d.fin-1000)+'</small></div>'
+      +'<div class="droite"><button type="button" class="btn petit principal" data-a="conge" data-k="'+d.id+'" data-d="1">Accepter</button><button type="button" class="btn petit" data-a="conge" data-k="'+d.id+'" data-d="0">Refuser</button></div></li>';
+  });
+  S.equipe.forEach(function(e){
+    if(!e.absent) return;
+    lignes+='<li class="rang"><div><b>'+h(nomComplet(e))+'</b><small>'+nomRole(e)+' · '+absenceTxt(e)+'</small></div><div class="droite">'
+      +(e.absent.interim?'<span class="puce ok">Intérimaire en place</span><button type="button" class="btn petit" data-a="interim" data-k="'+e.id+'">Retirer</button>'
+        :'<button type="button" class="btn petit" data-a="interim" data-k="'+e.id+'">Intérimaire · '+mt(paieInterim(e,"M"))+' par poste</button>')+'</div></li>';
+  });
+  if(!lignes) return "";
+  return '<div class="carte"><h2>Absences et congés</h2><ul class="liste">'+lignes+'</ul><p class="aide">Une personne absente reste payée. Un intérimaire tient ses postes à sa place, pour une fois et demie le salaire du métier. Un congé refusé pèse sur le moral ; une demande sans réponse est acceptée d\'office.</p></div>';
 }
 function carteRole(r){
   var R=ROLES[r], p=S.postes[r], m=moral(r), membres=S.equipe.filter(function(e){ return e.role===r; }), sv=SERVICES[R.service], aide;
@@ -1237,11 +1308,12 @@ function ecranPlanning(){
     if(!membres.length) return;
     blocs+='<div class="bloc"><h2>'+ROLES[r].pluriel+'</h2>'+membres.map(function(e){
       var m=moralDe(e), n=nbPostes(e);
-      return '<div class="carte"><div class="carte-haut"><h3>'+h(nomComplet(e))+'<small>'+pl(n,"poste","postes")+' · '+mt(paieSemaine(e))+' par semaine</small></h3><span class="puce '+(m>=60?"ok":m>=40?"warn":"bad")+'">Moral '+m+'</span></div>'
+      return '<div class="carte"><div class="carte-haut"><h3>'+h(nomComplet(e))+'<small>'+pl(n,"poste","postes")+' · '+mt(paieSemaine(e))+' par semaine'+(e.absent?'<br>'+absenceTxt(e)+(e.absent.interim?" · intérimaire en place":""):"")+'</small></h3><span class="puce '+(m>=60?"ok":m>=40?"warn":"bad")+'">Moral '+m+'</span></div>'
         +'<div class="semaine">'+e.plan.map(function(k,j){ return '<button type="button" class="jour p-'+k+(q.j===j?" ici":"")+'" data-a="plan" data-k="'+e.id+'" data-d="'+j+'" aria-label="'+JOURS_NOMS[j]+' : '+POSTES[k].nom+'"><small>'+JOURS_COURTS[j]+'</small><b>'+POSTES[k].court+'</b></button>'; }).join("")+'</div></div>';
     }).join("")+'</div>';
   });
   return barre()+entete("Planning","Semaine type · en ce moment : "+JOURS_NOMS[q.j]+", "+POSTES[q.k].nom.toLowerCase())
+    +absencesHtml()
     +'<div class="onglets">'+GROUPES_PLANNING.map(function(x){ var n=S.equipe.filter(function(e){ return x[3].indexOf(e.role)>=0; }).length; return '<button type="button" class="onglet'+(x[0]===G[0]?" actif":"")+'" data-a="planvue" data-k="'+x[0]+'">'+x[1]+(n?" ("+n+")":"")+'</button>'; }).join("")+'</div>'
     +'<div class="carte"><h2>'+G[2]+'</h2><div class="tableau"><table class="grille"><thead><tr><th></th>'+JOURS_COURTS.map(function(x,j){ return '<th class="'+(q.j===j?"ici":"")+'">'+x+'</th>'; }).join("")+'</tr></thead><tbody>'+grille+'</tbody></table></div>'
     +'<p class="aide">'+(G[0]==="autres"?"L'accueil et l'entretien comptent pour la journée entière, quel que soit le poste.":"Chaque service reçoit des patients pendant les postes où il a du personnel. La nuit, il en vient peu, sauf aux urgences.")+'</p></div>'
@@ -1422,6 +1494,7 @@ function ecranReglages(){
     +'<p class="aide"><b>Réputation.</b> Elle suit la satisfaction des derniers patients : attente, qualité du soignant, prix, accueil, propreté. Une bonne réputation attire plus de patients.</p>'
     +'<p class="aide"><b>Équipe.</b> Le salaire se règle par métier, pour un poste de 8 heures. Mal payée ou surchargée, une personne perd le moral, soigne moins bien et finit par démissionner.</p>'
     +'<p class="aide"><b>Expérience.</b> Chacun progresse en travaillant : un junior devient confirmé, puis senior. Il soigne alors mieux et plus vite, et son salaire augmente. Un stage payé par l\'hôpital, une fois par jour et par personne, accélère la progression.</p>'
+    +'<p class="aide"><b>Absences.</b> De temps en temps, une personne tombe malade ou demande un congé. Dans le planning, vous acceptez ou refusez la demande, et vous pouvez faire venir un intérimaire pour tenir les postes d\'une personne absente.</p>'
     +'<p class="aide"><b>Planning.</b> Il y a un planning pour les médecins, un pour les infirmiers et un pour l\'accueil et l\'entretien. Chaque personne a sa semaine type : matin (6 h à 14 h), après-midi (14 h à 22 h), nuit (22 h à 6 h) ou repos. On ne paie que les postes travaillés. Un service ne reçoit des patients que pendant les postes où il a du personnel.</p>'
     +'<p class="aide"><b>Matériel.</b> La caisse de l\'hôpital peut acheter du matériel sur trois niveaux : laboratoire, salle d\'attente, logiciel d\'accueil, machines de nettoyage, ambulances et bloc opératoire.</p>'
     +'<p class="aide"><b>Votre argent.</b> Votre salaire vous appartient. Dans Ma fiche, vous pouvez suivre des formations, le placer en actions, le prêter à l\'hôpital, faire des dons ou vous offrir une vie en dehors de l\'hôpital.</p>'
@@ -1490,12 +1563,26 @@ var A={
     var e=parId(S.equipe,+d.k);
     if(!e||e.occupe) return false;
     if(U.confirme!=="e"+e.id){ U.confirme="e"+e.id; return false; }
-    U.confirme=null; S.equipe.splice(S.equipe.indexOf(e),1);
+    U.confirme=null; S.equipe.splice(S.equipe.indexOf(e),1); S.demandes=S.demandes.filter(function(x){ return x.qui!==e.id; });
     noter(maintenant(),"",nomComplet(e)+" ("+nomRole(e).toLowerCase()+") quitte l'hôpital.");
     replanifier(maintenant()); return true;
   },
   salaire:function(d){ var p=S.postes[d.k], R=ROLES[d.k]; p.salaire=borne(p.salaire+(+d.d),Math.round(R.salaire*0.5),Math.round(R.salaire*2.5)); return true; },
   planvue:function(d){ U.planVue=d.k; return false; },
+  conge:function(d){
+    var dem=parId(S.demandes,+d.k), t=maintenant(), e;
+    if(!dem) return false;
+    e=parId(S.equipe,dem.qui); S.demandes.splice(S.demandes.indexOf(dem),1);
+    if(!e) return true;
+    if(d.d==="1"){ partirEnConge(e,dem,t,false); noter(t,"",nomComplet(e)+" obtient son congé, du "+dateLongue(dem.debut)+" au "+dateLongue(dem.fin-1000)+"."); }
+    else { e.humeur={v:-10,fin:jourApres(t,10)}; noter(t,"warn","Congé refusé à "+nomComplet(e)+" : son moral s'en ressent pendant dix jours."); }
+    return true;
+  },
+  interim:function(d){
+    var e=parId(S.equipe,+d.k), t=maintenant();
+    if(!e||!e.absent) return false;
+    e.absent.interim=!e.absent.interim; replanifier(t); affecter(t); return true;
+  },
   stage:function(d){
     var e=parId(S.equipe,+d.k), t=maintenant(), prix;
     if(!e||!stagePossible(e)) return false;
@@ -1710,7 +1797,7 @@ if(chaud&&chaud.snapshot) chaud.snapshot(function(){ return {S:S,U:U}; });
 if(chaud&&chaud.ready) chaud.ready(demarrer); else demarrer(chaud&&chaud.data);
 window.__hopital={etat:function(){ return S; },ecran:function(e){ U.ecran=e; rendre(); },
   sauter:function(ms){ S.decalage=(S.decalage||0)+ms; var c=avancer(maintenant()); rendre(); return c; },
-  calc:{posteDe:posteDe,moralDe:moralDe,optionsTraitement:optionsTraitement,produitsConnus:produitsConnus,differentiel:differentiel,testDispo:testDispo,reputation:reputation,moral:moral,attendus:attendus,periode:periode,renoncement:renoncement}};
+  calc:{absences:absences,jourApres:jourApres,posteDe:posteDe,moralDe:moralDe,optionsTraitement:optionsTraitement,produitsConnus:produitsConnus,differentiel:differentiel,testDispo:testDispo,reputation:reputation,moral:moral,attendus:attendus,periode:periode,renoncement:renoncement}};
 })();
 </script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){});</script>
