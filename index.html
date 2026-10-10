@@ -383,6 +383,16 @@ var BIENS=[["velo","Vélo électrique",200],["montre","Belle montre",400],["vaca
 // Les dons cumulés donnent droit à une plaque, qui améliore un peu la satisfaction de tous les patients
 var PLAQUES=[[500,"Un banc à votre nom",1],[3000,"Une salle à votre nom",2],[10000,"Une aile à votre nom",4]];
 var TAUX_MIN=2, TAUX_MAX=7, TAUX_PRET=5;
+// Le matériel : acheté avec la caisse, trois niveaux, chaque niveau coûte le double du précédent.
+// Clé, nom, prix du premier niveau, palier requis, effet de chaque niveau.
+var MATERIEL=[
+  ["labo","Laboratoire",1500,0,"Chaque niveau : tests de laboratoire 20 % moins chers, et vos médecins se trompent moins quand ils diagnostiquent seuls."],
+  ["attente","Salle d'attente",800,0,"Chaque niveau : les patients acceptent d'attendre 15 % plus longtemps."],
+  ["informatique","Logiciel d'accueil",1200,0,"Chaque niveau : un secrétaire accueille 25 % de patients en plus."],
+  ["entretien","Machines de nettoyage",1000,0,"Chaque niveau : un agent d'entretien couvre 25 % de patients en plus."],
+  ["ambulance","Ambulances",3000,1,"Chaque niveau : 10 % de patients en plus pour les services d'urgence."],
+  ["bloc","Bloc opératoire",6000,2,"Chaque niveau : les opérations durent 15 % moins longtemps."]];
+var NIVEAU_MAX=3, COUT_NIVEAU=[1,2,4], PART_ENTRETIEN=0.01;
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
 var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","pediatrie","rea"];
@@ -410,7 +420,7 @@ var ATOUTS={instruit:"Instruit",contact:"Sens du contact",patient:"Patient",sang
 var EXP=[{nom:"Junior",paie:0.85,qualite:0.88,vitesse:1.15,age:[24,30]},{nom:"Confirmé",f:"Confirmée",paie:1,qualite:1,vitesse:1,age:[30,45]},{nom:"Senior",paie:1.2,qualite:1.12,vitesse:0.85,age:[45,62]}];
 // Livre de comptes : la première lettre du poste donne le type, la suite le service concerné
 var TYPES_D=[["s","Salaires"],["f","Fournitures médicales"],["e","Charges et entretien"],["i","Investissements"],["x","Amendes et intérêts"]];
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["lits","Hospitalisation"],["pharma","Pharmacie"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["lits","Hospitalisation"],["pharma","Pharmacie"],["materiel","Matériel"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
@@ -426,7 +436,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -438,6 +448,7 @@ function sauver(){ try{ localStorage.setItem(CLE,JSON.stringify(S)); }catch(e){}
 // Parties commencées avant le diagnostic : on donne une maladie aux patients déjà là
 function migrer(){
   if(!S.diag) S.diag={ok:0,faux:0,auto:0,autoFaux:0};
+  if(!S.materiel) S.materiel={};
   S.patients=S.patients.filter(function(p){
     var e, l;
     if(p.mal&&MALADIES[p.mal]) return true;
@@ -525,6 +536,13 @@ function noter(t,classe,texte){ S.journal.unshift({t:t,c:classe,m:texte}); if(S.
 /* ------------------------------------------------------------------ L'hôpital à un instant donné */
 function reputation(){ var n=0, i; for(i=0;i<S.avis.length;i++) n+=S.avis[i]; return S.avis.length?n/S.avis.length:50; }
 function avis(note){ S.avis.push(borne(Math.round(note),0,100)); if(S.avis.length>AVIS_MAX) S.avis.shift(); }
+function niv(k){ return (S.materiel&&S.materiel[k])||0; }
+function entretienMateriel(){
+  var n=0;
+  MATERIEL.forEach(function(m){ for(var i=0;i<niv(m[0]);i++) n+=m[2]*COUT_NIVEAU[i]*PART_ENTRETIEN; });
+  return Math.round(n);
+}
+function coutTest(k){ var T=TESTS[k]; return T.imagerie||!T.cout?T.cout:Math.max(1,Math.round(T.cout*(1-0.2*niv("labo")))); }
 function forme(k){ return !!(S.moi.formations&&S.moi.formations[k]); }
 function bonusPlaque(){ var n=0; PLAQUES.forEach(function(x){ if(S.moi.dons>=x[0]) n=x[2]; }); return n; }
 function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1); }
@@ -568,8 +586,8 @@ function enAttente(){ return S.patients.filter(function(p){ return p.etat==="att
 function enSoin(){ return S.patients.filter(function(p){ return p.etat==="soin"; }); }
 function alites(){ return S.patients.filter(function(p){ return p.etat==="lit"; }); }
 function litsLibres(){ return S.lits-alites().length; }
-function couvAccueil(){ return Math.min(1,auTravail("secretaire")*PAR_SECRETAIRE/Math.max(1,S.prevus||1)); }
-function couvProprete(){ return Math.min(1,auTravail("agent")*PAR_AGENT/Math.max(1,(S.prevus||0)+S.lits)); }
+function couvAccueil(){ return Math.min(1,auTravail("secretaire")*PAR_SECRETAIRE*(1+0.25*niv("informatique"))/Math.max(1,S.prevus||1)); }
+function couvProprete(){ return Math.min(1,auTravail("agent")*PAR_AGENT*(1+0.25*niv("entretien"))/Math.max(1,(S.prevus||0)+S.lits)); }
 function couvLits(){ var o=alites().length; return o?Math.min(1,auTravail("infirmier")*LITS_PAR_INFIRMIER/o):1; }
 // Le moral d'un métier dépend du salaire horaire comparé à l'habitude, et de la longueur des journées
 function enPoste(e,t){ var q=posteDe(t===undefined?S.horloge:t); return !!e.plan&&e.plan[q.j]===q.k; }
@@ -619,7 +637,7 @@ function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie);
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT, k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMateriel(), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 function renoncement(sv,prix){
   var ref=sv==="lit"?REF_LIT:SERVICES[sv].prix, ratio=prix/ref, r;
   if(ratio<=1) return 0;
@@ -672,7 +690,7 @@ function ranger(p,t,issue){
 }
 function accueillir(p,t){
   S.stat.arrives++;
-  p.etat="diag"; p.limite=t+SERVICES[p.sv].patience*MIN; p.auto=t+DELAI_DIAG; S.patients.push(p);
+  p.etat="diag"; p.limite=t+Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente")))*MIN; p.auto=t+DELAI_DIAG; S.patients.push(p);
 }
 // Un test est possible si l'hôpital a ce qu'il faut. Renvoie la raison du refus, ou une chaîne vide.
 function testDispo(k){
@@ -697,7 +715,7 @@ function faireTest(p,k,t){
   var T=TESTS[k], e;
   if(p.tests[k]||testDispo(k)) return false;
   p.tests[k]=1;
-  inscrire(t,T.imagerie?"f:imagerie":T.service?"f:"+T.service:"f:soins",T.cout);
+  inscrire(t,T.imagerie?"f:imagerie":T.service?"f:"+T.service:"f:soins",coutTest(k));
   if(T.imagerie){
     e=radiologueLibre(); e.soignes=(e.soignes||0)+1;
     inscrire(t,"r:imagerie",S.tarifs.imagerie*T.imagerie); p.paye+=S.tarifs.imagerie*T.imagerie; p.imagerie=(p.imagerie||0)+1;
@@ -718,7 +736,7 @@ function diagnostiquerSeul(p,t){
   var utiles=Object.keys(MALADIES[p.mal].t).filter(function(k){ return k!=="examen"; }), faits=0, q=meilleurMedecin(), bon=MALADIES[p.mal].tr, ok;
   faireTest(p,"examen",t);
   utiles.forEach(function(k){ if(p.tests[k]||faireTest(p,k,t)) faits++; });
-  ok=Math.random()<borne(0.6+0.3*(utiles.length?faits/utiles.length:1)+(q-1)*0.4,0.45,0.97);
+  ok=Math.random()<borne(0.6+0.3*(utiles.length?faits/utiles.length:1)+(q-1)*0.4+0.06*niv("labo"),0.45,0.97);
   orienter(p,t,ok,true,ok?bon:optionsTraitement(p,p.mal).filter(function(x){ return x!==bon; })[0],ok);
 }
 // Les maladies que les symptômes du patient peuvent évoquer
@@ -742,7 +760,7 @@ function affecter(t){
     var sv=SERVICES[p.sv], dispo=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&libre(e); }), e, d;
     if(!dispo.length) return;
     dispo.sort(function(a,b){ return qualite(b)-qualite(a); });
-    e=dispo[0]; d=Math.max(5,Math.round(sv.duree*EXP[e.exp].vitesse*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)));
+    e=dispo[0]; d=Math.max(5,Math.round(sv.duree*EXP[e.exp].vitesse*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)*(p.sv==="chirurgie"?1-0.15*niv("bloc"):1)));
     p.etat="soin"; p.debut=t; p.fin=t+d*MIN; p.soignant=e.id; p.attente=Math.round((t-p.arrive)/MIN);
     e.occupe=p.id; e.minutes+=d;
     // Le traitement sort du stock au début des soins. En rupture, le patient est soigné sans, et il s'en souvient.
@@ -803,7 +821,7 @@ function planifierJour(debut,apres,nuitSeule){
       var l=Object.keys(MALADIES).filter(function(x){ return MALADIES[x].sv===sv; }), n, i, t;
       // Un service pas encore ouvert envoie quand même ses patients en journée : ils seront dirigés ailleurs
       if(S.ouverts[sv]?!prevusLe(sv,j,F[0]):(F[0]==="N"||!soignantsLe(j,F[0]))) return;
-      n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2); n=Math.floor(n)+(Math.random()<n%1?1:0);
+      n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1); n=Math.floor(n)+(Math.random()<n%1?1:0);
       for(i=0;i<n;i++){ t=debut+Math.round(alea(F[1],F[2])*HEURE); if(t>apres){ S.arrivees.push({t:t,mal:tirer(l)}); compte++; } }
     });
   });
@@ -873,6 +891,7 @@ function cloturer(t){
   inscrire(tj,"e:batiment",chargesBatiment());
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT);
+  inscrire(tj,"e:materiel",entretienMateriel());
   S.patients.forEach(function(p){ if(p.etat==="lit"){ inscrire(tj,"r:lits",S.tarifs.lit); p.paye+=S.tarifs.lit; } });
   if(S.caisse<0) inscrire(tj,"x:divers",Math.max(1,-S.caisse*TAUX_DECOUVERT));
   financesPerso(tj);
@@ -962,6 +981,7 @@ var I={
   ourson:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="6.5"/><circle cx="6.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="6.5" r="2.3"/><path d="M10 12h.01M14 12h.01M10.5 15.5c1 .8 2 .8 3 0"/></svg>',
   coeur:'<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10zM3 13h4l2-3 3 5 2-2h7"/></svg>',
   calendrier:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4M8 14h3M13 14h3M8 17h3"/></svg>',
+  outil:'<svg viewBox="0 0 24 24"><path d="M14.5 6.5a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3zM14.5 6.5l3-3M7 4l2 2M4 7l2 2M5.5 5.5l5 5"/></svg>',
   pilule:'<svg viewBox="0 0 24 24"><path d="M10.5 20.5a5 5 0 0 1-7-7l7-7a5 5 0 0 1 7 7zM7 10l7 7M17 3.5l3.5 3.5M15.5 5l3.5 3.5"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
 };
@@ -1067,6 +1087,7 @@ function ecranAccueil(){
     +tuile("g4","recrut","Recrutement","Engager du personnel","recrutement")
     +tuile("g7","services","Services",pl(ORDRE_SERVICES.filter(function(k){return S.ouverts[k];}).length,"ouvert","ouverts"),"services")
     +tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie")
+    +tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel")
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
     +tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances")
     +tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal")
@@ -1121,7 +1142,7 @@ function testHtml(p,k){
   var T=TESTS[k], r, raison;
   if(p.tests[k]){ r=resultat(p,k); return '<div class="test fait'+(r.anormal?" anormal":"")+'"><b>'+T.nom+'</b><small>'+h(r.txt)+'</small></div>'; }
   raison=testDispo(k);
-  return '<button type="button" class="test" data-a="test" data-k="'+k+'"'+(raison?" disabled":"")+'><b>'+T.nom+'<span>'+(raison||(T.imagerie?"facturé "+mt(S.tarifs.imagerie*T.imagerie)+" au patient":T.cout?"coûte "+mt(T.cout):"gratuit"))+'</span></b></button>';
+  return '<button type="button" class="test" data-a="test" data-k="'+k+'"'+(raison?" disabled":"")+'><b>'+T.nom+'<span>'+(raison||(T.imagerie?"facturé "+mt(S.tarifs.imagerie*T.imagerie)+" au patient":T.cout?"coûte "+mt(coutTest(k)):"gratuit"))+'</span></b></button>';
 }
 function candidatHtml(p,k){
   var m=MALADIES[k], actif=U.choix===k;
@@ -1257,6 +1278,18 @@ function ecranPharmacie(){
         +'<button type="button" class="btn petit" data-a="commander" data-k="'+k+'" data-d="'+GROS_LOT+'"'+(S.caisse>=b?"":" disabled")+'>+'+GROS_LOT+' · '+mt(b)+'</button></div></li>';
     }).join("")+'</ul></div>';
 }
+function ecranMateriel(){
+  return barre()+entete("Matériel","Entretien : "+mt(entretienMateriel())+" par jour")
+    +'<p class="aide">Le matériel s\'achète avec la caisse de l\'hôpital. Chaque niveau coûte le double du précédent et ajoute 1 % de son prix en entretien par jour.</p>'
+    +MATERIEL.map(function(m){
+      var n=niv(m[0]), verrou=m[3]>S.palier, prix=n<NIVEAU_MAX?m[2]*COUT_NIVEAU[n]:0, suite;
+      if(verrou) suite='<p class="aide">Disponible à partir du palier '+PALIERS[m[3]].nom+'.</p>';
+      else if(n>=NIVEAU_MAX) suite='<p class="aide">Niveau maximum atteint.</p>';
+      else suite='<div class="actions"><button type="button" class="btn principal" data-a="equiper" data-k="'+m[0]+'"'+(S.caisse>=prix?"":" disabled")+'>'+(n?"Améliorer":"Acheter")+' · '+mt(prix)+'</button>'+(S.caisse>=prix?"":'<span class="aide">Il manque '+mt(prix-S.caisse)+'.</span>')+'</div>';
+      return '<div class="carte"><div class="carte-haut"><h3>'+m[1]+'<small>'+m[4]+'</small></h3><span class="puce '+(n?"ok":"")+'">Niveau '+n+' / '+NIVEAU_MAX+'</span></div>'
+        +'<div class="piste nn"><div class="plein" style="width:'+(n/NIVEAU_MAX*100)+'%"></div></div>'+suite+'</div>';
+    }).join("");
+}
 function ecranTarifs(){
   return barre()+entete("Tarifs","Ce que paie chaque patient.")
     +debloques().map(function(k){ return carteTarif(k,SERVICES[k].acte+(S.ouverts[k]?"":" (service fermé)"),SERVICES[k].prix,SERVICES[k].pas); }).join("")
@@ -1360,6 +1393,7 @@ function ecranReglages(){
     +'<p class="aide"><b>Réputation.</b> Elle suit la satisfaction des derniers patients : attente, qualité du soignant, prix, accueil, propreté. Une bonne réputation attire plus de patients.</p>'
     +'<p class="aide"><b>Équipe.</b> Le salaire se règle par métier, pour un poste de 8 heures. Mal payée ou surchargée, une personne perd le moral, soigne moins bien et finit par démissionner.</p>'
     +'<p class="aide"><b>Planning.</b> Chaque personne a sa semaine type : matin (6 h à 14 h), après-midi (14 h à 22 h), nuit (22 h à 6 h) ou repos. On ne paie que les postes travaillés. Un service ne reçoit des patients que pendant les postes où il a du personnel.</p>'
+    +'<p class="aide"><b>Matériel.</b> La caisse de l\'hôpital peut acheter du matériel sur trois niveaux : laboratoire, salle d\'attente, logiciel d\'accueil, machines de nettoyage, ambulances et bloc opératoire.</p>'
     +'<p class="aide"><b>Votre argent.</b> Votre salaire vous appartient. Dans Ma fiche, vous pouvez suivre des formations, le placer en actions, le prêter à l\'hôpital, faire des dons ou vous offrir une vie en dehors de l\'hôpital.</p>'
     +'<p class="aide"><b>Paliers.</b> Cabinet médical, Clinique, Hôpital, CHU. Chaque palier débloque des services et rapporte une subvention.</p>'
     +'<p class="aide"><b>Argent.</b> L\'hôpital ne peut pas faire faillite. À découvert, la banque prélève 0,2 % par jour et les achats sont bloqués.</p></div>'
@@ -1447,6 +1481,16 @@ var A={
   lit:function(){
     if(S.palier<1||S.caisse<PRIX_LIT) return false;
     S.lits++; inscrire(maintenant(),"i:lits",PRIX_LIT); return true;
+  },
+  equiper:function(d){
+    var m=MATERIEL.filter(function(x){ return x[0]===d.k; })[0], t=maintenant(), n, prix;
+    if(!m||m[3]>S.palier) return false;
+    n=niv(m[0]); prix=m[2]*COUT_NIVEAU[n];
+    if(n>=NIVEAU_MAX||S.caisse<prix) return false;
+    S.materiel[m[0]]=n+1; inscrire(t,"i:materiel",prix);
+    noter(t,"ok",m[1]+" : niveau "+(n+1)+" ("+mt(prix)+").");
+    if(m[0]==="ambulance") replanifier(t);
+    return true;
   },
   vue:function(d){ U.vue=d.k; U.decal=0; return false; },
   decal:function(d){ U.decal=Math.min(0,U.decal+(+d.d)); return false; },
@@ -1560,7 +1604,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
