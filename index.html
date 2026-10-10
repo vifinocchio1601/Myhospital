@@ -472,7 +472,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -791,11 +791,22 @@ function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMa
 function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
 function dePoche(prix,ref){ return Math.round(prix)-partMutuelle(prix,ref); }
 function ratioPoche(prix,ref){ return dePoche(prix,ref)/Math.max(1,ref-Math.round(ref*(1-PART_PATIENT))); }
-function renoncement(sv,prix){
-  var ref=sv==="lit"?REF_LIT:SERVICES[sv].prix, ratio=ratioPoche(prix,ref), r;
-  if(ratio<=1) return 0;
-  r=(ratio-1)*0.4; if(sv!=="lit"&&SERVICES[sv].vital) r*=0.5;
-  return Math.min(0.95,r);
+// Aucun patient ne refuse un prix. Mais un service cher se fait une réputation : sa fréquentation glisse peu à peu
+// vers un niveau qui dépend de ce qu'un patient type y paie de sa poche (acte et nuits), comparé à l'habitude.
+var ELASTICITE=0.3, INERTIE_PRIX=0.2;
+function ratioService(sv){
+  var x=SERVICES[sv], nuits=x.sejour?(x.sejour[0]+x.sejour[1])/2:0;
+  return (dePoche(S.tarifs[sv],x.prix)+nuits*dePoche(S.tarifs.lit,REF_LIT))/Math.max(1,dePoche(x.prix,x.prix)+nuits*dePoche(REF_LIT,REF_LIT));
+}
+function demandeCible(sv){
+  var R=ratioService(sv), k=ELASTICITE*(SERVICES[sv].vital?0.5:1), ri=ratioPoche(S.tarifs.imagerie,SERVICES.imagerie.prix), d=R<=1?1+0.15*(1-R):1/(1+k*(R-1)*(R-1));
+  if(ri>1) d/=1+0.08*(ri-1)*(ri-1);
+  return Math.max(0.2,d);
+}
+function demande(sv){ return S.demande&&S.demande[sv]!==undefined?S.demande[sv]:1; }
+function ajusterDemande(){
+  if(!S.demande) S.demande={};
+  ORDRE_SERVICES.forEach(function(sv){ if(!SERVICES[sv].diag) S.demande[sv]=demande(sv)+(demandeCible(sv)-demande(sv))*INERTIE_PRIX; });
 }
 function capacitePoste(role){ var sv=SERVICES[ROLES[role].service]; return sv?Math.floor(480/sv.duree):0; }
 function libre(e){ return !e.occupe&&enPoste(e); }
@@ -893,7 +904,6 @@ function orienter(p,t,ok,auto,trait,traitOk){
   p.diag=ok?"ok":"faux"; p.parMoi=!auto; p.auto=0; p.trait=trait; p.traitOk=!!traitOk;
   if(auto){ S.diag.auto++; if(!ok) S.diag.autoFaux++; } else if(ok) S.diag.ok++; else S.diag.faux++;
   if(!S.ouverts[p.sv]){ S.stat.transferes++; S.stat.manque[p.sv]=(S.stat.manque[p.sv]||0)+1; avis(ok?55:35); ranger(p,t,"transfert"); return "transfert"; }
-  if(Math.random()<renoncement(p.sv,S.tarifs[p.sv])){ S.stat.renonces++; avis(30); ranger(p,t,"renonce"); return "renonce"; }
   if(p.pat) p.limite=Math.max(p.limite,t+Math.round(p.pat/2));
   p.etat="attente"; affecter(t); return "soin";
 }
@@ -941,9 +951,8 @@ function affecter(t){
   if(pris||file.length) reappro(t);
 }
 function satisfaction(p,q){
-  var sv=SERVICES[p.sv], ratio=ratioPoche(S.tarifs[p.sv],sv.prix), ri=ratioPoche(S.tarifs.imagerie,SERVICES.imagerie.prix), n=68+(q-1)*70;
+  var sv=SERVICES[p.sv], n=68+(q-1)*70;
   n-=Math.min(30,p.attente/sv.patience*30);
-  n-=ratio>1?Math.min(40,(ratio-1)*20):-(1-ratio)*15;
   n-=(1-couvAccueil())*15+(1-couvProprete())*20;
   if(p.traitOk===false) n-=35; else if(p.diag==="faux") n-=10; else if(p.parMoi) n+=5;
   if(p.rupture) n-=15;
@@ -951,7 +960,6 @@ function satisfaction(p,q){
   if(p.servi===1&&S.pharma.marge>MARGE_HABITUELLE) n-=(S.pharma.marge-MARGE_HABITUELLE)*0.15;
   n-=(p.inutiles||0)*5;
   n+=bonusPlaque();
-  if(p.imagerie&&ri>1) n-=Math.min(20,(ri-1)*10)*p.imagerie;
   return borne(n,0,100);
 }
 function porterPlainte(p,t,chance,min,max,motif){
@@ -991,8 +999,7 @@ function finSoin(p,t){
   affecter(t); monterPalier(t);
 }
 function sortir(p,t){
-  var ratio=ratioPoche(S.tarifs.lit,REF_LIT);
-  avis(p.note-(1-couvLits())*20-(ratio>1?Math.min(30,(ratio-1)*15):0));
+  avis(p.note-(1-couvLits())*20);
   ranger(p,t,"sorti");
 }
 function partir(p,t){
@@ -1028,7 +1035,7 @@ function planifierJour(debut,apres,nuitSeule){
       l.forEach(function(x){ fs+=poidsSaison(x,debut+12*HEURE); }); fs/=NB_MALADIES[sv];
       // Un service pas encore ouvert envoie quand même ses patients en journée : ils seront dirigés ailleurs
       if(S.ouverts[sv]?!prevusLe(sv,j,F[0],debut+(F[1]+1)*HEURE):(F[0]==="N"||!soignantsLe(j,F[0],debut+(F[1]+1)*HEURE))) return;
-      n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*fs; n=Math.floor(n)+(Math.random()<n%1?1:0);
+      n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*fs*demande(sv); n=Math.floor(n)+(Math.random()<n%1?1:0);
       fin=F[2]-(S.ouverts[sv]&&!prevusLe(sv,F[0]==="N"?(j+1)%7:j,F[0]==="M"?"A":F[0]==="A"?"N":"M",debut+(F[2]+1)*HEURE)?0.75:0);
       for(i=0;i<n;i++){ t=debut+Math.round(alea(F[1],fin)*HEURE); if(t>apres){ S.arrivees.push({t:t,mal:tirerMaladie(l,t)}); compte++; } }
     });
@@ -1152,7 +1159,7 @@ function cloturer(t){
   garde=cleJour(t-JOURS_GARDES*JOUR);
   for(vieux in S.cj) if(vieux<garde) delete S.cj[vieux];
   monterPalier(t);
-  absences(t); mutuelles(t);
+  absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
   if(S.portes){ planifierJour(t,t); planifierEvenement(t); }
   affecter(t); reappro(t);
@@ -1543,15 +1550,17 @@ function ecranServices(){
     +(S.palier>=1?'<p class="aide">Chaque patient alité paie '+mt(S.tarifs.lit)+' par nuit. Un lit coûte '+mt(ENTRETIEN_LIT)+' d\'entretien par jour. Il faut un infirmier pour '+LITS_PAR_INFIRMIER+' lits occupés.</p>'
       +'<div class="actions"><button type="button" class="btn principal" data-a="lit"'+(S.caisse>=PRIX_LIT?"":" disabled")+'>Acheter un lit · '+mt(PRIX_LIT)+'</button></div>':"")+'</div>';
 }
+function pourcent(x){ return Math.round(x*100)+" %"; }
 function carteTarif(k,nom,ref,pasPrix){
-  var prix=S.tarifs[k], r=Math.round(renoncement(k,prix)*100), poche=dePoche(prix,ref), normal=dePoche(ref,ref), effet;
-  if(k==="lit") effet=poche>normal?"Le patient paie plus que d'habitude : les patients alités sortent moins satisfaits.":"Les patients trouvent ce prix normal.";
-  else if(k==="imagerie"){ r=0; effet=poche>normal?"Le patient paie plus que d'habitude : ceux qui passent un examen repartent moins satisfaits.":"Facturé à chaque radio ou échographie, le double pour un scanner."; }
-  else effet=r?"Environ "+r+" % des patients renoncent à cause de ce qu'ils doivent payer.":poche<normal?"Le patient paie moins que d'habitude : il repart plus satisfait.":"Les patients trouvent ce prix normal.";
+  var prix=S.tarifs[k], poche=dePoche(prix,ref), normal=dePoche(ref,ref), service=k!=="lit"&&k!=="imagerie", d=service?demande(k):1, cible=service?demandeCible(k):1, effet;
+  if(k==="lit") effet="Compte dans la fréquentation des services où l'on reste hospitalisé.";
+  else if(k==="imagerie") effet="Facturé à chaque radio ou échographie, le double pour un scanner. Un prix élevé pèse un peu sur la fréquentation de tout l'hôpital.";
+  else effet=Math.abs(cible-d)<0.01?(Math.abs(d-1)<0.01?"Vos prix sont dans la norme.":"La fréquentation s'est installée à ce niveau."):cible<d?"Trop cher pour le quartier : la fréquentation va baisser peu à peu.":"Meilleur marché : la fréquentation va monter peu à peu.";
   return '<div class="carte"><div class="reglage"><div><b>'+nom+'</b><br><span class="aide">Prix habituel : '+mt(ref)+'</span></div>'+pas("prix",k,mt(prix),pasPrix,prix>0,prix<ref*5,"le prix")+'</div>'
     +ligne("Remboursé par la mutuelle",mt(partMutuelle(prix,ref)))
     +ligne("Payé par le patient",mt(poche)+(poche!==normal?' <span class="aide">(d\'habitude '+mt(normal)+')</span>':""))
-    +'<p class="aide'+(r>=25?" moins-c":"")+'">'+effet+'</p></div>';
+    +(service?ligne("Fréquentation",pourcent(d)+(Math.abs(cible-d)>=0.01?' <span class="aide">(tend vers '+pourcent(cible)+')</span>':"")):"")
+    +'<p class="aide'+(service&&cible<0.75?" moins-c":"")+'">'+effet+'</p></div>';
 }
 function ecranPharmacie(){
   var connus=produitsConnus(), valeur=0;
@@ -1584,7 +1593,7 @@ function ecranMateriel(){
 }
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
-    +'<p class="aide">La mutuelle rembourse une somme fixe : 60 % du prix habituel. Tout ce que vous demandez en plus est un supplément, entièrement à la charge du patient.</p>'
+    +'<p class="aide">Aucun patient ne refuse votre prix. La mutuelle rembourse une somme fixe, 60 % du prix habituel ; le reste est payé par le patient. Mais un service cher se fait une réputation : il y vient peu à peu moins de monde. Un service bon marché en attire davantage.</p>'
     +debloques().map(function(k){ return carteTarif(k,SERVICES[k].acte+(S.ouverts[k]?"":" (service fermé)"),SERVICES[k].prix,SERVICES[k].pas); }).join("")
     +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,10):"");
 }
@@ -1738,7 +1747,7 @@ function ecranReglages(){
     +'<p class="aide"><b>Matériel.</b> La caisse de l\'hôpital peut acheter du matériel sur trois niveaux : laboratoire, salle d\'attente, logiciel d\'accueil, machines de nettoyage, ambulances et bloc opératoire.</p>'
     +'<p class="aide"><b>Votre argent.</b> Votre salaire vous appartient. Dans Ma fiche, vous pouvez suivre des formations, le placer en actions, le prêter à l\'hôpital, faire des dons ou vous offrir une vie en dehors de l\'hôpital.</p>'
     +'<p class="aide"><b>Paliers.</b> Cabinet médical, Clinique, Hôpital, CHU. Chaque palier débloque des services et rapporte une subvention.</p>'
-    +'<p class="aide"><b>Mutuelles.</b> La mutuelle rembourse 60 % du prix habituel d\'un soin, pas plus : si vous demandez davantage, le supplément est payé par le patient, et c\'est à ce qu\'il paie de sa poche qu\'il réagit. Le patient paie sa part sur place. La mutuelle règle la sienne 5 à 8 jours plus tard, et en conteste parfois une partie : il faut alors la relancer dans Finances, sinon l\'argent est perdu. La caisse suit donc le résultat avec retard.</p>'
+    +'<p class="aide"><b>Mutuelles.</b> La mutuelle rembourse 60 % du prix habituel d\'un soin, pas plus : si vous demandez davantage, le supplément est payé par le patient. Personne ne refuse votre prix, mais un service cher attire peu à peu moins de patients (voir Tarifs). Le patient paie sa part sur place. La mutuelle règle la sienne 5 à 8 jours plus tard, et en conteste parfois une partie : il faut alors la relancer dans Finances, sinon l\'argent est perdu. La caisse suit donc le résultat avec retard.</p>'
     +'<p class="aide"><b>Comptabilité.</b> L\'hôpital paie 25 % de cotisations patronales sur les salaires. Un service, un lit ou du matériel ne sont pas des charges le jour de l\'achat : ils sont amortis sur cinq ans. Un médicament devient une charge quand il sort du stock. Finances montre le résultat, le bilan et le passage du résultat à la caisse.</p>'
     +'<p class="aide"><b>Argent.</b> L\'hôpital ne peut pas faire faillite. À découvert, la banque prélève 0,2 % par jour et les achats sont bloqués.</p></div>'
     +'<div class="carte"><h2>Recommencer</h2><p class="aide">Efface cette partie et repart d\'un cabinet vide.</p><div class="actions"><button type="button" class="btn danger" data-a="recommencer">'+(U.confirme==="recommencer"?"Confirmer : tout effacer":"Recommencer une partie")+'</button></div></div>';
@@ -2051,7 +2060,7 @@ if(chaud&&chaud.snapshot) chaud.snapshot(function(){ return {S:S,U:U}; });
 if(chaud&&chaud.ready) chaud.ready(demarrer); else demarrer(chaud&&chaud.data);
 window.__hopital={etat:function(){ return S; },ecran:function(e){ U.ecran=e; rendre(); },
   sauter:function(ms){ S.decalage=(S.decalage||0)+ms; var c=avancer(maintenant()); rendre(); return c; },
-  calc:{bilan:bilan,creances:creances,absences:absences,jourApres:jourApres,posteDe:posteDe,moralDe:moralDe,optionsTraitement:optionsTraitement,produitsConnus:produitsConnus,differentiel:differentiel,testDispo:testDispo,reputation:reputation,moral:moral,attendus:attendus,periode:periode,renoncement:renoncement}};
+  calc:{demandeCible:demandeCible,bilan:bilan,creances:creances,absences:absences,jourApres:jourApres,posteDe:posteDe,moralDe:moralDe,optionsTraitement:optionsTraitement,produitsConnus:produitsConnus,differentiel:differentiel,testDispo:testDispo,reputation:reputation,moral:moral,attendus:attendus,periode:periode}};
 })();
 </script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){});</script>
