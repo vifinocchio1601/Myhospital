@@ -272,7 +272,7 @@ button.test:hover:not(:disabled){border-color:var(--faint)}
 /* ------------------------------------------------------------------ Règles de l'hôpital */
 var V=1, CLE="myhospital-v1", CLE_APP="myhospital-appareil";
 var MIN=60000, HEURE=3600000, JOUR=86400000, TRANCHE=20*MIN, PAIE_DIRECTEUR=100;
-var CAISSE_DEPART=5000, PRIX_LIT=400, ENTRETIEN_LIT=3, REF_LIT=80, LITS_PAR_INFIRMIER=5, PAR_SECRETAIRE=30, PAR_AGENT=30;
+var CAISSE_DEPART=5000, PRIX_LIT=1500, ENTRETIEN_LIT=12, REF_LIT=450, LITS_PAR_INFIRMIER=5, PAR_SECRETAIRE=30, PAR_AGENT=30;
 var PART_FOURNITURES=0.08, TAUX_DECOUVERT=0.002, TAUX_EVENEMENT=0.45;
 var JOURNAL_MAX=120, REGISTRE_MAX=60, AVIS_MAX=40, JOURS_GARDES=40;
 var DEVISES=["$","€","£","fl","¥"];
@@ -290,10 +290,10 @@ var SERVICES={
   soins:{nom:"Soins infirmiers",acte:"Soin infirmier",palier:0,cout:0,entretien:0,roles:["infirmier"],duree:15,prix:15,pas:1,patience:90,poids:25,ic:"seringue",g:"g2"},
   urgences:{nom:"Urgences",acte:"Passage aux urgences",palier:1,cout:1500,entretien:30,roles:["urgentiste"],duree:40,prix:60,pas:5,patience:40,poids:22,vital:true,ic:"eclair",g:"g3"},
   imagerie:{nom:"Imagerie",acte:"Examen d'imagerie",palier:1,cout:2500,entretien:40,roles:["radiologue"],duree:20,prix:70,pas:5,patience:90,poids:0,diag:true,ic:"radio",g:"g4"},
-  chirurgie:{nom:"Chirurgie",acte:"Opération",palier:2,cout:6000,entretien:80,roles:["chirurgien"],duree:90,prix:400,pas:20,patience:180,poids:8,sejour:[2,4],ic:"bistouri",g:"g7"},
-  maternite:{nom:"Maternité",acte:"Accouchement",palier:2,cout:4000,entretien:50,roles:["sagefemme"],duree:120,prix:300,pas:20,patience:60,poids:6,sejour:[2,3],vital:true,femme:true,ic:"berceau",g:"g5"},
+  chirurgie:{nom:"Chirurgie",acte:"Opération",palier:2,cout:12000,entretien:900,roles:["chirurgien"],duree:90,prix:2500,pas:100,patience:180,poids:1.8,sejour:[2,4],ic:"bistouri",g:"g7"},
+  maternite:{nom:"Maternité",acte:"Accouchement",palier:2,cout:9000,entretien:600,roles:["sagefemme"],duree:120,prix:3000,pas:100,patience:60,poids:2,sejour:[2,3],vital:true,femme:true,ic:"berceau",g:"g5"},
   pediatrie:{nom:"Pédiatrie",acte:"Consultation de pédiatrie",palier:3,cout:3000,entretien:40,roles:["pediatre"],duree:25,prix:40,pas:2,patience:90,poids:16,enfant:true,ic:"ourson",g:"g6"},
-  rea:{nom:"Soins intensifs",acte:"Prise en charge en soins intensifs",palier:3,cout:9000,entretien:120,roles:["reanimateur"],duree:60,prix:600,pas:25,patience:30,poids:3,sejour:[3,5],vital:true,ic:"coeur",g:"g3"}
+  rea:{nom:"Soins intensifs",acte:"Prise en charge en soins intensifs",palier:3,cout:25000,entretien:2000,roles:["reanimateur"],duree:60,prix:3500,pas:100,patience:30,poids:1.2,sejour:[3,5],vital:true,ic:"coeur",g:"g3"}
 };
 // Le diagnostic : chaque patient arrive avec quelques symptômes. Le directeur fait des tests puis désigne la maladie.
 // Sans réponse au bout de DELAI_DIAG, un médecin de l'équipe prend le relais.
@@ -345,8 +345,8 @@ var MALADIES={
   hernie:{nom:"Hernie inguinale",sv:"chirurgie",tri:"vert",s:["aine","effort"],t:{examen:"!Grosseur à l'aine, qui rentre quand on appuie.",echo:"!Hernie confirmée."}},
   femur:{nom:"Fracture du col du fémur",sv:"chirurgie",tri:"orange",sejour:[3,5],c:"A fait une chute",s:["hanche","marche"],t:{examen:"!Jambe raccourcie, tournée vers l'extérieur.",radio:"!Fracture du col du fémur."}},
   accouchement:{nom:"Accouchement",sv:"maternite",tri:"orange",c:"Enceinte de 9 mois",s:["contractions","eaux"],t:{examen:"!Col ouvert : le travail a commencé.",echo:"Bébé en bonne position."}},
-  fauxtravail:{nom:"Fausses contractions",sv:"maternite",tri:"vert",sejour:0,p:0.2,d:0.25,c:"Enceinte de 9 mois",s:["contractions","ventre"],t:{examen:"Col fermé. Contractions irrégulières.",echo:"Tout va bien pour le bébé."}},
-  preeclampsie:{nom:"Pré-éclampsie",sv:"maternite",tri:"orange",sejour:[2,3],p:0.6,d:0.5,c:"Enceinte de 9 mois",s:["tete","gonflement","vision"],t:{examen:"!Tension très élevée : 17/11.",urine:"!Protéines dans les urines.",sang:"!Plaquettes basses."}},
+  fauxtravail:{nom:"Fausses contractions",sv:"maternite",tri:"vert",sejour:0,p:0.03,d:0.25,c:"Enceinte de 9 mois",s:["contractions","ventre"],t:{examen:"Col fermé. Contractions irrégulières.",echo:"Tout va bien pour le bébé."}},
+  preeclampsie:{nom:"Pré-éclampsie",sv:"maternite",tri:"orange",sejour:[2,3],p:0.4,d:0.5,c:"Enceinte de 9 mois",s:["tete","gonflement","vision"],t:{examen:"!Tension très élevée : 17/11.",urine:"!Protéines dans les urines.",sang:"!Plaquettes basses."}},
   otite:{nom:"Otite",sv:"pediatrie",tri:"vert",s:["fievre","oreille","pleurs"],t:{examen:"!Tympan rouge et bombé."}},
   varicelle:{nom:"Varicelle",sv:"pediatrie",tri:"vert",s:["fievre","boutons","demange"],t:{examen:"!Petites cloques sur tout le corps."}},
   rougeole:{nom:"Rougeole",sv:"pediatrie",tri:"jaune",s:["fievre","boutons","toux","yeux"],t:{examen:"!Plaques rouges, taches blanches dans la bouche.",sang:"!Rougeole confirmée."}},
@@ -364,7 +364,7 @@ var PRODUITS={
   antidouleur:{nom:"Antidouleurs",cout:2},antibiotique:{nom:"Antibiotiques",cout:5},inhalateur:{nom:"Inhalateurs",cout:8},rehydratation:{nom:"Solutés de réhydratation",cout:3},
   antimigraineux:{nom:"Antimigraineux",cout:6},antihypertenseur:{nom:"Antihypertenseurs",cout:5},antidiabetique:{nom:"Antidiabétiques",cout:7},fer:{nom:"Fer",cout:3},
   antiinflammatoire:{nom:"Anti-inflammatoires",cout:3},antihistaminique:{nom:"Antihistaminiques",cout:3},pansement:{nom:"Pansements et sutures",cout:2},platre:{nom:"Plâtres et attelles",cout:12},
-  anxiolytique:{nom:"Calmants",cout:4},anticoagulant:{nom:"Anticoagulants",cout:30},bloc:{nom:"Matériel de bloc opératoire",cout:60},accouchement:{nom:"Kits d'accouchement",cout:40}};
+  anxiolytique:{nom:"Calmants",cout:4},anticoagulant:{nom:"Anticoagulants",cout:30},bloc:{nom:"Matériel de bloc opératoire",cout:300},accouchement:{nom:"Kits d'accouchement",cout:200}};
 var TRAITEMENTS={grippe:"antidouleur",angine:"antibiotique",rhume:"antidouleur",bronchite:"inhalateur",gastro:"rehydratation",cystite:"antibiotique",migraine:"antimigraineux",hypertension:"antihypertenseur",
   diabete:"antidiabetique",anemie:"fer",lumbago:"antiinflammatoire",allergie:"antihistaminique",plaie:"pansement",brulure:"pansement",entorse:"platre",piqure:"antihistaminique",
   fracture:"platre",angoisse:"anxiolytique",chaleur:"rehydratation",pneumonie:"antibiotique",commotion:"repos",colique:"antiinflammatoire",asthme:"inhalateur",
@@ -419,6 +419,8 @@ var SAISONS=[
   {nom:"Printemps",txt:"allergies et crises d'asthme",m:{allergie:3,asthme:1.6,piqure:1.3,grippe:0.6}},
   {nom:"Été",txt:"coups de chaleur, piqûres et brûlures",m:{piqure:2.5,brulure:1.8,gastro:1.6,plaie:1.3,grippe:0.3,bronchite:0.5,bronchiolite:0.2,rhume:0.6}},
   {nom:"Automne",txt:"rhumes et premières grippes",m:{rhume:1.6,grippe:1.3,angine:1.3,entorse:1.2}}];
+// Le barème 2 a remis les gros actes à des montants proches de la réalité ; les anciennes parties sont converties une fois
+var BAREME=2, ANCIENS_PRIX={chirurgie:400,maternite:300,rea:600,lit:80}, ANCIENS_SALAIRES={chirurgien:260,sagefemme:110,reanimateur:280};
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; if(MALADIES[k].saison===undefined) NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
 var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","pediatrie","rea"];
@@ -431,10 +433,10 @@ var ROLES={
   agent:{nom:"Agent d'entretien",f:"Agente d'entretien",pluriel:"Agents d'entretien",salaire:45,service:"admin",palier:0,atouts:["endurant","rigoureux"]},
   urgentiste:{nom:"Urgentiste",f:"Urgentiste",pluriel:"Urgentistes",salaire:160,service:"urgences",palier:1,atouts:["sangfroid","endurant"]},
   radiologue:{nom:"Radiologue",f:"Radiologue",pluriel:"Radiologues",salaire:150,service:"imagerie",palier:1,atouts:["instruit","rigoureux"]},
-  chirurgien:{nom:"Chirurgien",f:"Chirurgienne",pluriel:"Chirurgiens",salaire:260,service:"chirurgie",palier:2,atouts:["sangfroid","mains"]},
-  sagefemme:{nom:"Sage-femme",f:"Sage-femme",pluriel:"Sages-femmes",salaire:110,service:"maternite",palier:2,atouts:["patient","sangfroid"]},
+  chirurgien:{nom:"Chirurgien",f:"Chirurgienne",pluriel:"Chirurgiens",salaire:520,service:"chirurgie",palier:2,atouts:["sangfroid","mains"]},
+  sagefemme:{nom:"Sage-femme",f:"Sage-femme",pluriel:"Sages-femmes",salaire:180,service:"maternite",palier:2,atouts:["patient","sangfroid"]},
   pediatre:{nom:"Pédiatre",f:"Pédiatre",pluriel:"Pédiatres",salaire:150,service:"pediatrie",palier:3,atouts:["patient","contact"]},
-  reanimateur:{nom:"Médecin réanimateur",f:"Médecin réanimatrice",pluriel:"Médecins réanimateurs",salaire:280,service:"rea",palier:3,atouts:["sangfroid","instruit"]}
+  reanimateur:{nom:"Médecin réanimateur",f:"Médecin réanimatrice",pluriel:"Médecins réanimateurs",salaire:560,service:"rea",palier:3,atouts:["sangfroid","instruit"]}
 };
 // Le planning : trois postes de 8 heures. Chaque personne a une semaine type, un poste ou un repos par jour.
 var POSTES={M:{nom:"Matin",court:"Mat",h:"6 h – 14 h"},A:{nom:"Après-midi",court:"Apm",h:"14 h – 22 h"},N:{nom:"Nuit",court:"Nuit",h:"22 h – 6 h"},R:{nom:"Repos",court:"–",h:""}};
@@ -470,7 +472,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -483,6 +485,12 @@ function sauver(){ try{ localStorage.setItem(CLE,JSON.stringify(S)); }catch(e){}
 function migrer(){
   if(!S.diag) S.diag={ok:0,faux:0,auto:0,autoFaux:0};
   if(!S.materiel) S.materiel={};
+  if(S.bareme!==BAREME){
+    Object.keys(ANCIENS_PRIX).forEach(function(k){ var neuf=k==="lit"?REF_LIT:SERVICES[k].prix; if(S.tarifs[k]!==undefined) S.tarifs[k]=Math.round(S.tarifs[k]/ANCIENS_PRIX[k]*neuf/10)*10; });
+    Object.keys(ANCIENS_SALAIRES).forEach(function(k){ if(S.postes[k]) S.postes[k].salaire=Math.round(S.postes[k].salaire/ANCIENS_SALAIRES[k]*ROLES[k].salaire/5)*5; });
+    S.bareme=BAREME;
+    if(S.fondeLe) noter(S.horloge||S.fondeLe,"","Nouveaux prix pour les gros actes : opération, accouchement, soins intensifs et nuit d'hôpital sont maintenant à des montants proches de la réalité. Leurs coûts ont suivi.");
+  }
   // Parties commencées avant les mutuelles et le bilan : ce qui a déjà été acheté compte comme entièrement amorti
   if(!S.immos){
     S.immos=[]; S.frac={}; S.bordereaux=[]; S.contestes=[]; S.nBord=1; S.valStock={};
@@ -1578,7 +1586,7 @@ function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
     +'<p class="aide">La mutuelle rembourse une somme fixe : 60 % du prix habituel. Tout ce que vous demandez en plus est un supplément, entièrement à la charge du patient.</p>'
     +debloques().map(function(k){ return carteTarif(k,SERVICES[k].acte+(S.ouverts[k]?"":" (service fermé)"),SERVICES[k].prix,SERVICES[k].pas); }).join("")
-    +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,5):"");
+    +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,10):"");
 }
 function periode(vue,decal){
   var d=new Date(maintenant()), cles=[], i, q, titre, src="cm";
