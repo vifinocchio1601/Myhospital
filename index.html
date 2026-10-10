@@ -580,8 +580,8 @@ function inscrireF(t,poste,montant){
   S.frac[poste]=total;
 }
 // Une facture : la recette est acquise, le patient paie sa part, le reste part sur le lot du jour pour la mutuelle
-function facturer(t,poste,prix){
-  var part=Math.round(prix*(1-PART_PATIENT)), k=cleJour(t), b=null;
+function facturer(t,poste,prix,ref){
+  var part=partMutuelle(prix,ref), k=cleJour(t), b=null;
   inscrire(t,poste,prix);
   if(part<=0) return;
   inscrire(t,"c:mutuelle",part);
@@ -778,10 +778,15 @@ function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NU
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
 function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMateriel()+PRIME_ASSURANCE[S.palier], k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+// La mutuelle rembourse une somme fixe : 60 % du prix habituel, jamais plus que le prix demandé.
+// Tout ce qui dépasse est un supplément, payé par le patient. C'est à ce qu'il paie de sa poche qu'il réagit.
+function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
+function dePoche(prix,ref){ return Math.round(prix)-partMutuelle(prix,ref); }
+function ratioPoche(prix,ref){ return dePoche(prix,ref)/Math.max(1,ref-Math.round(ref*(1-PART_PATIENT))); }
 function renoncement(sv,prix){
-  var ref=sv==="lit"?REF_LIT:SERVICES[sv].prix, ratio=prix/ref, r;
+  var ref=sv==="lit"?REF_LIT:SERVICES[sv].prix, ratio=ratioPoche(prix,ref), r;
   if(ratio<=1) return 0;
-  r=(ratio-1)*0.8; if(sv!=="lit"&&SERVICES[sv].vital) r*=0.5;
+  r=(ratio-1)*0.4; if(sv!=="lit"&&SERVICES[sv].vital) r*=0.5;
   return Math.min(0.95,r);
 }
 function capacitePoste(role){ var sv=SERVICES[ROLES[role].service]; return sv?Math.floor(480/sv.duree):0; }
@@ -870,7 +875,7 @@ function faireTest(p,k,t){
   inscrire(t,T.imagerie?"f:imagerie":T.service?"f:"+T.service:"f:soins",coutTest(k));
   if(T.imagerie){
     e=radiologueLibre(); e.soignes=(e.soignes||0)+1; gagnerXp(e,1,t);
-    facturer(t,"r:imagerie",S.tarifs.imagerie*T.imagerie); p.paye+=S.tarifs.imagerie*T.imagerie; p.imagerie=(p.imagerie||0)+1;
+    facturer(t,"r:imagerie",S.tarifs.imagerie*T.imagerie,SERVICES.imagerie.prix*T.imagerie); p.paye+=S.tarifs.imagerie*T.imagerie; p.imagerie=(p.imagerie||0)+1;
   }
   if(k!=="examen"&&MALADIES[p.mal].t[k]===undefined) p.inutiles=(p.inutiles||0)+1;
   return true;
@@ -928,9 +933,9 @@ function affecter(t){
   if(pris||file.length) reappro(t);
 }
 function satisfaction(p,q){
-  var sv=SERVICES[p.sv], ratio=S.tarifs[p.sv]/sv.prix, ri=S.tarifs.imagerie/SERVICES.imagerie.prix, n=68+(q-1)*70;
+  var sv=SERVICES[p.sv], ratio=ratioPoche(S.tarifs[p.sv],sv.prix), ri=ratioPoche(S.tarifs.imagerie,SERVICES.imagerie.prix), n=68+(q-1)*70;
   n-=Math.min(30,p.attente/sv.patience*30);
-  n-=ratio>1?(ratio-1)*40:-(1-ratio)*15;
+  n-=ratio>1?Math.min(40,(ratio-1)*20):-(1-ratio)*15;
   n-=(1-couvAccueil())*15+(1-couvProprete())*20;
   if(p.traitOk===false) n-=35; else if(p.diag==="faux") n-=10; else if(p.parMoi) n+=5;
   if(p.rupture) n-=15;
@@ -938,7 +943,7 @@ function satisfaction(p,q){
   if(p.servi===1&&S.pharma.marge>MARGE_HABITUELLE) n-=(S.pharma.marge-MARGE_HABITUELLE)*0.15;
   n-=(p.inutiles||0)*5;
   n+=bonusPlaque();
-  if(p.imagerie&&ri>1) n-=(ri-1)*20*p.imagerie;
+  if(p.imagerie&&ri>1) n-=Math.min(20,(ri-1)*10)*p.imagerie;
   return borne(n,0,100);
 }
 function porterPlainte(p,t,chance,min,max,motif){
@@ -966,7 +971,7 @@ function finSoin(p,t){
     noter(t,"warn","Complication pour "+nomComplet(p)+" ("+MALADIES[p.mal].nom.toLowerCase()+") : deux jours d'hospitalisation de plus.");
     porterPlainte(p,t,faute?0.25:0.03,500,1500,"complication après les soins");
   }
-  facturer(t,"r:"+p.sv,prix); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
+  facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
   p.paye+=prix; S.soignes++; S.stat.soignes++;
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
@@ -978,8 +983,8 @@ function finSoin(p,t){
   affecter(t); monterPalier(t);
 }
 function sortir(p,t){
-  var ratio=S.tarifs.lit/REF_LIT;
-  avis(p.note-(1-couvLits())*20-(ratio>1?(ratio-1)*30:0));
+  var ratio=ratioPoche(S.tarifs.lit,REF_LIT);
+  avis(p.note-(1-couvLits())*20-(ratio>1?Math.min(30,(ratio-1)*15):0));
   ranger(p,t,"sorti");
 }
 function partir(p,t){
@@ -1121,7 +1126,7 @@ function cloturer(t){
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT);
   inscrire(tj,"e:materiel",entretienMateriel());
   if(S.portes) inscrire(tj,"e:plaintes",PRIME_ASSURANCE[S.palier]);
-  S.patients.forEach(function(p){ if(p.etat==="lit"){ facturer(tj,"r:lits",S.tarifs.lit); p.paye+=S.tarifs.lit; } });
+  S.patients.forEach(function(p){ if(p.etat==="lit"){ facturer(tj,"r:lits",S.tarifs.lit,REF_LIT); p.paye+=S.tarifs.lit; } });
   amortir(tj);
   if(S.caisse<0) inscrire(tj,"x:divers",Math.max(1,-S.caisse*TAUX_DECOUVERT));
   financesPerso(tj);
@@ -1531,11 +1536,13 @@ function ecranServices(){
       +'<div class="actions"><button type="button" class="btn principal" data-a="lit"'+(S.caisse>=PRIX_LIT?"":" disabled")+'>Acheter un lit · '+mt(PRIX_LIT)+'</button></div>':"")+'</div>';
 }
 function carteTarif(k,nom,ref,pasPrix){
-  var prix=S.tarifs[k], r=Math.round(renoncement(k,prix)*100), effet;
-  if(k==="lit") effet=prix>ref?"Plus cher que l'habitude : les patients alités sortent moins satisfaits.":"Les patients trouvent ce prix normal.";
-  else if(k==="imagerie"){ r=0; effet=prix>ref?"Plus cher que l'habitude : les patients qui passent un examen repartent moins satisfaits.":"Facturé à chaque radio ou échographie, le double pour un scanner."; }
-  else effet=r?"Environ "+r+" % des patients renoncent à cause du prix.":prix<ref?"Moins cher que l'habitude : les patients repartent plus satisfaits.":"Les patients trouvent ce prix normal.";
+  var prix=S.tarifs[k], r=Math.round(renoncement(k,prix)*100), poche=dePoche(prix,ref), normal=dePoche(ref,ref), effet;
+  if(k==="lit") effet=poche>normal?"Le patient paie plus que d'habitude : les patients alités sortent moins satisfaits.":"Les patients trouvent ce prix normal.";
+  else if(k==="imagerie"){ r=0; effet=poche>normal?"Le patient paie plus que d'habitude : ceux qui passent un examen repartent moins satisfaits.":"Facturé à chaque radio ou échographie, le double pour un scanner."; }
+  else effet=r?"Environ "+r+" % des patients renoncent à cause de ce qu'ils doivent payer.":poche<normal?"Le patient paie moins que d'habitude : il repart plus satisfait.":"Les patients trouvent ce prix normal.";
   return '<div class="carte"><div class="reglage"><div><b>'+nom+'</b><br><span class="aide">Prix habituel : '+mt(ref)+'</span></div>'+pas("prix",k,mt(prix),pasPrix,prix>0,prix<ref*5,"le prix")+'</div>'
+    +ligne("Remboursé par la mutuelle",mt(partMutuelle(prix,ref)))
+    +ligne("Payé par le patient",mt(poche)+(poche!==normal?' <span class="aide">(d\'habitude '+mt(normal)+')</span>':""))
     +'<p class="aide'+(r>=25?" moins-c":"")+'">'+effet+'</p></div>';
 }
 function ecranPharmacie(){
@@ -1568,7 +1575,8 @@ function ecranMateriel(){
     }).join("");
 }
 function ecranTarifs(){
-  return barre()+entete("Tarifs","Ce que paie chaque patient.")
+  return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
+    +'<p class="aide">La mutuelle rembourse une somme fixe : 60 % du prix habituel. Tout ce que vous demandez en plus est un supplément, entièrement à la charge du patient.</p>'
     +debloques().map(function(k){ return carteTarif(k,SERVICES[k].acte+(S.ouverts[k]?"":" (service fermé)"),SERVICES[k].prix,SERVICES[k].pas); }).join("")
     +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,5):"");
 }
@@ -1630,7 +1638,7 @@ function pageBilan(){
 function pageMutuelles(){
   var t=maintenant(), attente=0, conteste=0;
   S.bordereaux.forEach(function(b){ attente+=b.m; }); S.contestes.forEach(function(c){ conteste+=c.m; });
-  return '<div class="carte">'+ligne("Part payée sur place par le patient",Math.round(PART_PATIENT*100)+" %")+ligne("En attente de paiement",mt(attente))+ligne("Contesté par la mutuelle",mt(conteste))
+  return '<div class="carte">'+ligne("Remboursement de la mutuelle",Math.round((1-PART_PATIENT)*100)+" % du prix habituel")+ligne("En attente de paiement",mt(attente))+ligne("Contesté par la mutuelle",mt(conteste))
     +'<p class="aide">La mutuelle règle chaque journée de factures en un lot, '+DELAI_MUTUELLE[0]+' à '+DELAI_MUTUELLE[1]+' jours plus tard. Les médicaments de la pharmacie sont payés entièrement par le patient.</p></div>'
     +(S.contestes.length?'<div class="bloc"><h2>Factures contestées</h2><ul class="liste">'+S.contestes.map(function(c){
       return '<li class="rang"><div><b>'+mt(c.m)+'</b><small>Factures du '+dateCourte(c.t)+'</small><small>'+(c.relance?'Relancée : paiement dans <span data-reste="'+c.relance+'">'+resteTxt(c.relance)+'</span>':'Sans relance, perdu dans <span data-reste="'+c.limite+'">'+resteTxt(c.limite)+'</span>')+'</small></div>'
@@ -1722,7 +1730,7 @@ function ecranReglages(){
     +'<p class="aide"><b>Matériel.</b> La caisse de l\'hôpital peut acheter du matériel sur trois niveaux : laboratoire, salle d\'attente, logiciel d\'accueil, machines de nettoyage, ambulances et bloc opératoire.</p>'
     +'<p class="aide"><b>Votre argent.</b> Votre salaire vous appartient. Dans Ma fiche, vous pouvez suivre des formations, le placer en actions, le prêter à l\'hôpital, faire des dons ou vous offrir une vie en dehors de l\'hôpital.</p>'
     +'<p class="aide"><b>Paliers.</b> Cabinet médical, Clinique, Hôpital, CHU. Chaque palier débloque des services et rapporte une subvention.</p>'
-    +'<p class="aide"><b>Mutuelles.</b> Le patient paie 40 % sur place. La mutuelle règle le reste 5 à 8 jours plus tard, et en conteste parfois une partie : il faut alors la relancer dans Finances, sinon l\'argent est perdu. La caisse suit donc le résultat avec retard.</p>'
+    +'<p class="aide"><b>Mutuelles.</b> La mutuelle rembourse 60 % du prix habituel d\'un soin, pas plus : si vous demandez davantage, le supplément est payé par le patient, et c\'est à ce qu\'il paie de sa poche qu\'il réagit. Le patient paie sa part sur place. La mutuelle règle la sienne 5 à 8 jours plus tard, et en conteste parfois une partie : il faut alors la relancer dans Finances, sinon l\'argent est perdu. La caisse suit donc le résultat avec retard.</p>'
     +'<p class="aide"><b>Comptabilité.</b> L\'hôpital paie 25 % de cotisations patronales sur les salaires. Un service, un lit ou du matériel ne sont pas des charges le jour de l\'achat : ils sont amortis sur cinq ans. Un médicament devient une charge quand il sort du stock. Finances montre le résultat, le bilan et le passage du résultat à la caisse.</p>'
     +'<p class="aide"><b>Argent.</b> L\'hôpital ne peut pas faire faillite. À découvert, la banque prélève 0,2 % par jour et les achats sont bloqués.</p></div>'
     +'<div class="carte"><h2>Recommencer</h2><p class="aide">Efface cette partie et repart d\'un cabinet vide.</p><div class="actions"><button type="button" class="btn danger" data-a="recommencer">'+(U.confirme==="recommencer"?"Confirmer : tout effacer":"Recommencer une partie")+'</button></div></div>';
