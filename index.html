@@ -474,7 +474,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -492,6 +492,11 @@ function migrer(){
   if(S.fondeLe&&!S.subventionEtat){
     S.subventionEtat=1;
     if(S.cj&&S.cm){ inscrire(S.horloge||Date.now(),"r:divers",15000); noter(S.horloge||Date.now(),"ok","L'État verse une subvention exceptionnelle de "+mt(15000)+" à l'hôpital."); }
+  }
+  // Cadeau de 50 000 sur l'argent personnel du directeur, une seule fois
+  if(S.fondeLe&&!S.bonusMoi){
+    S.bonusMoi=1;
+    if(S.moi){ S.moi.argent+=50000; noter(S.horloge||Date.now(),"ok","Vous recevez "+mt(50000)+" sur votre compte personnel."); }
   }
   if(S.bareme!==BAREME){
     Object.keys(ANCIENS_PRIX).forEach(function(k){ var neuf=k==="lit"?REF_LIT:SERVICES[k].prix; if(S.tarifs[k]!==undefined) S.tarifs[k]=Math.round(S.tarifs[k]/ANCIENS_PRIX[k]*neuf/10)*10; });
