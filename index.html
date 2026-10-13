@@ -440,6 +440,8 @@ var ROLES={
 };
 // Le planning : trois postes de 8 heures. Chaque personne a une semaine type, un poste ou un repos par jour.
 var POSTES={M:{nom:"Matin",court:"Mat",h:"6 h – 14 h"},A:{nom:"Après-midi",court:"Apm",h:"14 h – 22 h"},N:{nom:"Nuit",court:"Nuit",h:"22 h – 6 h"},R:{nom:"Repos",court:"–",h:""}};
+var ROLES_JOUR=["secretaire","agent"], QUALITE_GARDE=0.8, LENT_AUTRE=1.5, LENT_GARDE=2;
+function deJour(e){ return ROLES_JOUR.indexOf(e.role)>=0; }
 var CYCLE_POSTES={M:"A",A:"N",N:"R",R:"M"}, FENETRES=[["M",6.5,14],["A",14,22],["N",22,30]], PRIME_NUIT=1.25;
 var JOURS_COURTS=["Lu","Ma","Me","Je","Ve","Sa","Di"], JOURS_NOMS=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 var ORDRE_ROLES=["generaliste","chef","infirmier","secretaire","agent","urgentiste","radiologue","chirurgien","sagefemme","pediatre","reanimateur"];
@@ -485,6 +487,7 @@ function sauver(){ try{ localStorage.setItem(CLE,JSON.stringify(S)); }catch(e){}
 function migrer(){
   if(!S.diag) S.diag={ok:0,faux:0,auto:0,autoFaux:0};
   if(!S.materiel) S.materiel={};
+  (S.equipe||[]).forEach(function(e){ if(deJour(e)&&e.plan) e.plan=e.plan.map(function(k){ return k==="R"?"R":"M"; }); });
   // Subvention exceptionnelle de l'État, versée une seule fois aux parties déjà commencées
   if(S.fondeLe&&!S.subventionEtat){
     S.subventionEtat=1;
@@ -681,8 +684,8 @@ function meilleurMedecin(){ var q=0; S.equipe.forEach(function(e){ if(MEDECINS.i
 function qualiteRelais(p){
   var q=meilleurMedecin(), ouvert=S.ouverts[p.sv];
   if(q) return q;
-  S.equipe.forEach(function(e){ if(estSoignant(e)&&enPoste(e)&&(!ouvert||SERVICES[p.sv].roles.indexOf(e.role)>=0)) q=Math.max(q,qualite(e)-0.15); });
-  return q;
+  S.equipe.forEach(function(e){ if(estSoignant(e)&&enPoste(e)) q=Math.max(q,qualite(e)-0.15); });
+  return q||QUALITE_GARDE;
 }
 function radiologueLibre(){ for(var i=0;i<S.equipe.length;i++) if(S.equipe[i].role==="radiologue"&&enPoste(S.equipe[i])) return S.equipe[i]; return null; }
 function nomProduit(k){ return k==="repos"?"Repos et surveillance":PRODUITS[k].nom; }
@@ -754,7 +757,7 @@ function moral(role){
 }
 // Une semaine type pour une nouvelle recrue : cinq postes, là où son métier est le moins couvert, en commençant par aujourd'hui
 function planAuto(e){
-  var plan=["R","R","R","R","R","R","R"], sv=SERVICES[ROLES[e.role].service], choix=sv&&sv.vital&&S.ouverts[ROLES[e.role].service]?["M","A","N"]:["M","A"];
+  var plan=["R","R","R","R","R","R","R"], sv=SERVICES[ROLES[e.role].service], choix=deJour(e)?["M"]:sv&&sv.vital&&S.ouverts[ROLES[e.role].service]?["M","A","N"]:["M","A"];
   var auj=jourSemaine(S.horloge||Date.now()), pref=null, i, j, mieux;
   for(i=0;i<5;i++){
     mieux=null;
@@ -941,12 +944,20 @@ function differentiel(p){
 function affecter(t){
   var file=enAttente().sort(function(a,b){ return TRI[a.tri][2]-TRI[b.tri][2]||a.arrive-b.arrive; }), pris=false;
   file.forEach(function(p){
-    var sv=SERVICES[p.sv], dispo=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&libre(e); }), e, d;
-    if(!dispo.length) return;
-    dispo.sort(function(a,b){ return qualite(b)-qualite(a); });
-    e=dispo[0]; d=Math.max(5,Math.round(sv.duree*(remplace(e,t)?1:EXP[e.exp].vitesse)*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)*(p.sv==="chirurgie"?1-0.15*niv("bloc"):1)*(1+0.15*(p.aggr||0))));
-    p.etat="soin"; p.debut=t; p.fin=t+d*MIN; p.soignant=e.id; p.attente=Math.round((t-p.arrive)/MIN);
-    e.occupe=p.id; e.minutes+=d;
+    var sv=SERVICES[p.sv], dispo=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&libre(e); }), e=null, d, lent=1;
+    if(!dispo.length){
+      // Personne du service en poste : un autre soignant dépanne, sinon le médecin de garde, plus lentement
+      if(S.equipe.some(function(x){ return sv.roles.indexOf(x.role)>=0&&enPoste(x); })) return;
+      dispo=S.equipe.filter(function(x){ return estSoignant(x)&&libre(x); }); lent=LENT_AUTRE;
+      if(!dispo.length){
+        if(enPosteMaintenant()||S.patients.some(function(x){ return x.etat==="soin"&&x.garde; })) return;
+        lent=LENT_GARDE;
+      }
+    }
+    if(dispo.length){ dispo.sort(function(a,b){ return qualite(b)-qualite(a); }); e=dispo[0]; }
+    d=Math.max(5,Math.round(sv.duree*lent*(!e||remplace(e,t)?1:EXP[e.exp].vitesse)*(MALADIES[p.mal].d||1)*(p.traitOk===false?1.5:1)*(p.sv==="chirurgie"?1-0.15*niv("bloc"):1)*(1+0.15*(p.aggr||0))));
+    p.etat="soin"; p.debut=t; p.fin=t+d*MIN; p.soignant=e?e.id:0; p.garde=e?0:1; p.lent=lent>1?1:0; p.attente=Math.round((t-p.arrive)/MIN);
+    if(e){ e.occupe=p.id; e.minutes+=d; }
     // Le traitement sort du stock au début des soins. En rupture, le patient est soigné sans, et il s'en souvient.
     if(p.trait&&p.trait!=="repos"&&!p.servi){
       if(stockDe(p.trait)>0){ sortirStock(p.trait,t); p.servi=1; pris=true; }
@@ -982,7 +993,7 @@ function deces(p,t,cause,faute){
   ranger(p,t,"deces");
 }
 function finSoin(p,t){
-  var sv=SERVICES[p.sv], part=MALADIES[p.mal].p||1, e=parId(S.equipe,p.soignant), prix=Math.round(S.tarifs[p.sv]*part), q=e?qualite(e):1, faute=p.traitOk===false||!!p.rupture, note, risque;
+  var sv=SERVICES[p.sv], part=MALADIES[p.mal].p||1, e=parId(S.equipe,p.soignant), prix=Math.round(S.tarifs[p.sv]*part), q=e?qualite(e)-(p.lent?0.15:0):p.garde?QUALITE_GARDE:1, faute=p.traitOk===false||!!p.rupture, note, risque;
   if(e){ e.occupe=null; e.soignes=(e.soignes||0)+1; if(!remplace(e,t)) gagnerXp(e,1,t); }
   // Le risque de complication dépend de la gravité, d'une erreur de traitement, d'une rupture de stock et du soignant
   risque=(RISQUE_COMPLICATION[p.tri]||0)*(p.traitOk===false?3:1)*(p.rupture?2:1)/Math.max(0.7,q);
@@ -1039,9 +1050,11 @@ function planifierJour(debut,apres,nuitSeule){
       var l=Object.keys(MALADIES).filter(function(x){ return MALADIES[x].sv===sv; }), n, i, t, fs=0, fin;
       l.forEach(function(x){ fs+=poidsSaison(x,debut+12*HEURE); }); fs/=NB_MALADIES[sv];
       // Un service pas encore ouvert envoie quand même ses patients en journée : ils seront dirigés ailleurs
-      if(S.ouverts[sv]?!prevusLe(sv,j,F[0],debut+(F[1]+1)*HEURE):(F[0]==="N"||!soignantsLe(j,F[0],debut+(F[1]+1)*HEURE))) return;
-      n=base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*fs*demande(sv); n=Math.floor(n)+(Math.random()<n%1?1:0);
-      fin=F[2]-(S.ouverts[sv]&&!prevusLe(sv,F[0]==="N"?(j+1)%7:j,F[0]==="M"?"A":F[0]==="A"?"N":"M",debut+(F[2]+1)*HEURE)?0.75:0);
+      var reduit=1;
+      if(S.ouverts[sv]){ if(!prevusLe(sv,j,F[0],debut+(F[1]+1)*HEURE)) reduit=soignantsLe(j,F[0],debut+(F[1]+1)*HEURE)?0.5:0.25; }
+      else if(F[0]==="N"||!soignantsLe(j,F[0],debut+(F[1]+1)*HEURE)) return;
+      n=reduit*base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*fs*demande(sv); n=Math.floor(n)+(Math.random()<n%1?1:0);
+      fin=F[2];
       for(i=0;i<n;i++){ t=debut+Math.round(alea(F[1],fin)*HEURE); if(t>apres){ S.arrivees.push({t:t,mal:tirerMaladie(l,t)}); compte++; } }
     });
   });
@@ -1275,7 +1288,7 @@ function alertes(){
   var l=[], rep, k, m, n;
   function a(classe,texte,cible,bouton){ l.push('<div class="alerte '+classe+'"><span>'+texte+'</span>'+(cible?'<button type="button" class="btn petit" data-a="aller" data-e="'+cible+'">'+bouton+'</button>':'')+'</div>'); }
   if(!S.portes){ a("","Engagez un médecin généraliste ou un infirmier : le cabinet ouvrira ses portes aussitôt.","recrutement","Recruter"); return l.join(""); }
-  if(!enPosteMaintenant()) a("warn","Aucun soignant n'est en poste en ce moment ("+POSTES[posteDe(S.horloge).k].nom.toLowerCase()+"). Les patients que vous faites entrer attendront.","planning","Voir le planning");
+  if(!enPosteMaintenant()) a("warn","Aucun soignant n'est en poste en ce moment ("+POSTES[posteDe(S.horloge).k].nom.toLowerCase()+"). Un médecin de garde assure le minimum : moins de patients, soignés plus lentement.","planning","Voir le planning");
   n=S.contestes.filter(function(c){ return !c.relance; }).length;
   if(n) a("warn","La mutuelle conteste "+pl(n,"lot","lots")+" de factures. Sans relance, l'argent est perdu.","mutuelles","Voir les mutuelles");
   if(S.plaintes.length) a("bad",pl(S.plaintes.length,"plainte attend","plaintes attendent")+" votre décision.","journal","Voir les plaintes");
@@ -1378,7 +1391,7 @@ function ligneAttente(p){
 }
 function ligneSoin(p){
   var e=parId(S.equipe,p.soignant);
-  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>'+nomMal(p)+' · '+(e?h(nomComplet(e)):"")+'</small>'
+  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>'+nomMal(p)+' · '+(e?h(nomComplet(e))+(p.lent?" (en dépannage)":""):p.garde?"Médecin de garde":"")+'</small>'
     +'<div class="piste nn" style="margin-top:6px"><div class="plein" data-debut="'+p.debut+'" data-fin="'+p.fin+'" style="width:'+borne((maintenant()-p.debut)/(p.fin-p.debut)*100,0,100)+'%"></div></div></div>'
     +'<div class="droite">'+triHtml(p.tri)+erreurHtml(p)+'<span class="puce num">encore <span data-reste="'+p.fin+'">'+resteTxt(p.fin)+'</span></span></div></li>';
 }
@@ -1501,7 +1514,8 @@ function ecranEquipe(){
 function ecranPlanning(){
   var q=posteDe(maintenant()), G=GROUPES_PLANNING.filter(function(x){ return x[0]===U.planVue; })[0]||GROUPES_PLANNING[0], grille="", blocs="";
   function prevus(j,k){ var n=0; S.equipe.forEach(function(e){ if(G[3].indexOf(e.role)>=0&&e.plan[j]===k) n++; }); return n; }
-  ["M","A","N"].forEach(function(k){
+  if(G[0]==="autres") grille='<tr><th>Journée<small>présent</small></th>'+JOURS_COURTS.map(function(x,j){ var n=0; S.equipe.forEach(function(e){ if(G[3].indexOf(e.role)>=0&&e.plan[j]!=="R") n++; }); return '<td class="'+(n?"":"zero")+(q.j===j?" ici":"")+'">'+(n||"–")+'</td>'; }).join("")+'</tr>';
+  else ["M","A","N"].forEach(function(k){
     grille+='<tr><th>'+POSTES[k].nom+'<small>'+POSTES[k].h+'</small></th>'+JOURS_COURTS.map(function(x,j){ var n=prevus(j,k); return '<td class="'+(n?"":"zero")+(q.j===j&&q.k===k?" ici":"")+'">'+(n||"–")+'</td>'; }).join("")+'</tr>';
   });
   G[3].forEach(function(r){
@@ -1510,15 +1524,15 @@ function ecranPlanning(){
     blocs+='<div class="bloc"><h2>'+ROLES[r].pluriel+'</h2>'+membres.map(function(e){
       var m=moralDe(e), n=nbPostes(e);
       return '<div class="carte"><div class="carte-haut"><h3>'+h(nomComplet(e))+'<small>'+pl(n,"poste","postes")+' · '+mt(paieSemaine(e))+' par semaine'+(e.absent?'<br>'+absenceTxt(e)+(e.absent.interim?" · intérimaire en place":""):"")+'</small></h3><span class="puce '+(m>=60?"ok":m>=40?"warn":"bad")+'">Moral '+m+'</span></div>'
-        +'<div class="semaine">'+e.plan.map(function(k,j){ return '<button type="button" class="jour p-'+k+(q.j===j?" ici":"")+'" data-a="plan" data-k="'+e.id+'" data-d="'+j+'" aria-label="'+JOURS_NOMS[j]+' : '+POSTES[k].nom+'"><small>'+JOURS_COURTS[j]+'</small><b>'+POSTES[k].court+'</b></button>'; }).join("")+'</div></div>';
+        +'<div class="semaine">'+e.plan.map(function(k,j){ return '<button type="button" class="jour p-'+k+(q.j===j?" ici":"")+'" data-a="plan" data-k="'+e.id+'" data-d="'+j+'" aria-label="'+JOURS_NOMS[j]+' : '+(deJour(e)&&k!=="R"?"Journée":POSTES[k].nom)+'"><small>'+JOURS_COURTS[j]+'</small><b>'+(deJour(e)&&k!=="R"?"Jour":POSTES[k].court)+'</b></button>'; }).join("")+'</div></div>';
     }).join("")+'</div>';
   });
   return barre()+entete("Planning","Semaine type · en ce moment : "+JOURS_NOMS[q.j]+", "+POSTES[q.k].nom.toLowerCase())
     +absencesHtml()
     +'<div class="onglets">'+GROUPES_PLANNING.map(function(x){ var n=S.equipe.filter(function(e){ return x[3].indexOf(e.role)>=0; }).length; return '<button type="button" class="onglet'+(x[0]===G[0]?" actif":"")+'" data-a="planvue" data-k="'+x[0]+'">'+x[1]+(n?" ("+n+")":"")+'</button>'; }).join("")+'</div>'
     +'<div class="carte"><h2>'+G[2]+'</h2><div class="tableau"><table class="grille"><thead><tr><th></th>'+JOURS_COURTS.map(function(x,j){ return '<th class="'+(q.j===j?"ici":"")+'">'+x+'</th>'; }).join("")+'</tr></thead><tbody>'+grille+'</tbody></table></div>'
-    +'<p class="aide">'+(G[0]==="autres"?"L'accueil et l'entretien comptent pour la journée entière, quel que soit le poste.":"Chaque service reçoit des patients pendant les postes où il a du personnel. La nuit, il en vient peu, sauf aux urgences.")+'</p></div>'
-    +(blocs?'<p class="aide">Touchez un jour pour changer de poste : matin, après-midi, nuit, repos. Au-delà de cinq postes par semaine ou de trois nuits, le moral baisse. Une nuit est payée 25 % de plus.</p>'+blocs
+    +'<p class="aide">'+(G[0]==="autres"?"L'accueil et l'entretien travaillent en journée, sans service de nuit.":"Un poste sans personne ne ferme pas : un collègue d'un autre service dépanne, ou un médecin de garde, mais moins de patients viennent et les soins sont plus lents. La nuit, il en vient peu, sauf aux urgences.")+'</p></div>'
+    +(blocs?'<p class="aide">'+(G[0]==="autres"?"Touchez un jour pour passer de travail à repos. Au-delà de cinq jours par semaine, le moral baisse.":"Touchez un jour pour changer de poste : matin, après-midi, nuit, repos. Au-delà de cinq postes par semaine ou de trois nuits, le moral baisse. Une nuit est payée 25 % de plus.")+'</p>'+blocs
       :'<p class="vide">Personne dans ce groupe pour le moment.</p><button type="button" class="btn principal large" data-a="aller" data-e="recrutement">'+I.recrut+'Recruter</button>');
 }
 function ecranRecrutement(){
@@ -1854,7 +1868,7 @@ var A={
   plan:function(d){
     var e=parId(S.equipe,+d.k), j=+d.d, t=maintenant();
     if(!e||!(j>=0&&j<7)) return false;
-    e.plan[j]=CYCLE_POSTES[e.plan[j]]||"M"; replanifier(t); affecter(t); return true;
+    e.plan[j]=deJour(e)?(e.plan[j]==="R"?"M":"R"):(CYCLE_POSTES[e.plan[j]]||"M"); replanifier(t); affecter(t); return true;
   },
   prix:function(d){ var ref=d.k==="lit"?REF_LIT:SERVICES[d.k].prix; S.tarifs[d.k]=borne(S.tarifs[d.k]+(+d.d),0,ref*5); return true; },
   ouvrir:function(d){
