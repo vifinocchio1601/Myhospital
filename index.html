@@ -280,8 +280,9 @@ var DEVISES=["$","€","£","fl","¥"];
 var PALIERS=[
   {nom:"Cabinet médical",min:0,rep:0,charges:40,base:44,subvention:0},
   {nom:"Clinique",min:30,rep:50,charges:120,base:88,subvention:1000},
-  {nom:"Hôpital",min:150,rep:60,charges:260,base:162,subvention:3000},
-  {nom:"CHU",min:500,rep:70,charges:500,base:260,subvention:6000}];
+  {nom:"Hôpital",min:150,rep:60,charges:260,base:180,subvention:3000},
+  {nom:"CHU",min:500,rep:70,charges:500,base:325,subvention:6000},
+  {nom:"Centre de référence",min:1500,rep:75,charges:850,base:420,subvention:20000}];
 // Le triage suit l'échelle de Manchester : du rouge (immédiat) au bleu (non urgent)
 var TRI={rouge:["Rouge","immédiat",0],orange:["Orange","très urgent",1],jaune:["Jaune","urgent",2],vert:["Vert","standard",3],bleu:["Bleu","non urgent",4]};
 // Chaque service : palier, prix d'ouverture, entretien par jour, métiers qui y soignent, durée d'un acte (minutes réelles), prix habituel, patience du patient.
@@ -293,17 +294,22 @@ var SERVICES={
   chirurgie:{nom:"Chirurgie",acte:"Opération",palier:2,cout:12000,entretien:900,roles:["chirurgien"],duree:90,prix:2500,pas:100,patience:180,poids:1.8,sejour:[2,4],ic:"bistouri",g:"g7"},
   maternite:{nom:"Maternité",acte:"Accouchement",palier:2,cout:9000,entretien:600,roles:["sagefemme"],duree:120,prix:3000,pas:100,patience:60,poids:2,sejour:[2,3],vital:true,femme:true,ic:"berceau",g:"g5"},
   pediatrie:{nom:"Pédiatrie",acte:"Consultation de pédiatrie",palier:3,cout:3000,entretien:40,roles:["pediatre"],duree:25,prix:40,pas:2,patience:90,poids:16,enfant:true,ic:"ourson",g:"g6"},
-  rea:{nom:"Soins intensifs",acte:"Prise en charge en soins intensifs",palier:3,cout:25000,entretien:2000,roles:["reanimateur"],duree:60,prix:3500,pas:100,patience:30,poids:1.2,sejour:[3,5],vital:true,ic:"coeur",g:"g3"}
+  rea:{nom:"Soins intensifs",acte:"Prise en charge en soins intensifs",palier:3,cout:25000,entretien:2000,roles:["reanimateur"],duree:60,prix:3500,pas:100,patience:30,poids:1.2,sejour:[3,5],vital:true,ic:"coeur",g:"g3"},
+  dentaire:{nom:"Dentisterie",acte:"Soin dentaire",palier:2,cout:6000,entretien:80,roles:["dentiste"],duree:30,prix:120,pas:5,patience:90,poids:10,ic:"dent",g:"g2"},
+  cardio:{nom:"Cardiologie",acte:"Consultation de cardiologie",palier:3,cout:15000,entretien:400,roles:["cardiologue"],duree:40,prix:250,pas:10,patience:120,poids:8,ic:"pouls",g:"g3"},
+  psy:{nom:"Psychiatrie",acte:"Consultation de psychiatrie",palier:3,cout:4000,entretien:60,roles:["psychiatre"],duree:45,prix:90,pas:5,patience:120,poids:8,ic:"cerveau",g:"g4"},
+  onco:{nom:"Oncologie",acte:"Cure de chimiothérapie",palier:4,cout:40000,entretien:2500,roles:["oncologue"],duree:90,prix:5000,pas:100,patience:240,poids:1.5,sejour:[1,3],ic:"ruban",g:"g5"}
 };
 // Le diagnostic : chaque patient arrive avec quelques symptômes. Le directeur fait des tests puis désigne la maladie.
 // Sans réponse au bout de DELAI_DIAG, un médecin de l'équipe prend le relais.
-var DELAI_DIAG=15*MIN, MEDECINS=["generaliste","chef","urgentiste","chirurgien","pediatre","reanimateur"];
+var DELAI_DIAG=15*MIN, MEDECINS=["generaliste","chef","urgentiste","chirurgien","pediatre","reanimateur","cardiologue","psychiatre","oncologue"];
 var SYMPTOMES={fievre:"Fièvre",toux:"Toux",courbatures:"Courbatures",fatigue:"Fatigue",gorge:"Mal de gorge",nez:"Nez qui coule",ventre:"Maux de ventre",nausees:"Nausées",diarrhee:"Diarrhée",
   urines:"Brûlures en urinant",tete:"Maux de tête",lumiere:"Gêne à la lumière",vertiges:"Vertiges",soif:"Soif intense",pipi:"Envies fréquentes d'uriner",paleur:"Pâleur",souffle:"Essoufflement",
   dos:"Mal de dos",raideur:"Raideur",eternue:"Éternuements",yeux:"Yeux rouges",plaie:"Plaie qui saigne",douleur:"Douleur locale",rougeur:"Rougeur",brulure:"Brûlure",cheville:"Douleur à la cheville",
   gonflement:"Gonflement",marche:"Impossible de marcher",demange:"Démangeaisons",thorax:"Douleur dans la poitrine",palpit:"Palpitations",sifflement:"Respiration sifflante",flanc:"Douleur violente au flanc",
   aine:"Grosseur à l'aine",effort:"Douleur à l'effort",hanche:"Douleur à la hanche",contractions:"Contractions",eaux:"Perte des eaux",vision:"Vision trouble",oreille:"Mal à l'oreille",pleurs:"Pleurs",
-  boutons:"Boutons",paralysie:"Faiblesse d'un côté du corps",parole:"Difficulté à parler",sueurs:"Sueurs",confusion:"Confusion",frissons:"Frissons",nuque:"Nuque raide",vomit:"Vomissements"};
+  boutons:"Boutons",paralysie:"Faiblesse d'un côté du corps",parole:"Difficulté à parler",sueurs:"Sueurs",confusion:"Confusion",frissons:"Frissons",nuque:"Nuque raide",vomit:"Vomissements",
+  tristesse:"Tristesse",insomnie:"Troubles du sommeil",irritable:"Irritabilité",inquiet:"Inquiétude permanente",dent:"Mal de dents",machoire:"Douleur à la mâchoire",amaigri:"Perte de poids",bleus:"Bleus sans raison",boule:"Boule dans le sein"};
 // Les tests : coût pour l'hôpital, et ce qu'il faut pour pouvoir les faire. L'imagerie est facturée au patient au tarif du service.
 var TESTS={
   examen:{nom:"Examen clinique",cout:0,delai:0,normal:"Rien de particulier à l'examen."},
@@ -313,8 +319,9 @@ var TESTS={
   ecg:{nom:"ECG",cout:5,delai:5,service:"urgences",normal:"Tracé normal."},
   radio:{nom:"Radiographie",cout:10,delai:15,imagerie:1,normal:"Radio normale."},
   echo:{nom:"Échographie",cout:10,delai:20,imagerie:1,normal:"Échographie normale."},
-  scanner:{nom:"Scanner",cout:25,delai:45,imagerie:2,palier:2,normal:"Scanner normal."}};
-var ORDRE_TESTS=["examen","rapide","sang","urine","ecg","radio","echo","scanner"];
+  scanner:{nom:"Scanner",cout:25,delai:45,imagerie:2,palier:2,normal:"Scanner normal."},
+  irm:{nom:"IRM",cout:60,delai:30,imagerie:3,materiel:"irm",normal:"IRM normale."}};
+var ORDRE_TESTS=["examen","rapide","sang","urine","ecg","radio","echo","scanner","irm"];
 // Les maladies : service qui les soigne, triage, symptômes (s), contexte toujours visible (c), résultat des tests utiles (t).
 // Un résultat qui commence par « ! » est anormal. p et d réduisent le prix et la durée de l'acte, sejour remplace celui du service.
 var MALADIES={
@@ -324,11 +331,11 @@ var MALADIES={
   bronchite:{nom:"Bronchite",sv:"consult",tri:"vert",s:["toux","fatigue","fievre"],t:{examen:"!38,0 °C. Râles à l'auscultation.",rapide:"Tests grippe et streptocoque négatifs.",sang:"!Signes d'infection virale.",radio:"Radio des poumons normale."}},
   gastro:{nom:"Gastro-entérite",sv:"consult",tri:"vert",s:["ventre","nausees","diarrhee","fievre"],t:{examen:"!Ventre souple, sensible partout.",sang:"!Légère déshydratation.",urine:"Analyse d'urine normale.",echo:"Échographie du ventre normale."}},
   cystite:{nom:"Infection urinaire",sv:"consult",tri:"vert",s:["urines","ventre","fievre"],t:{examen:"!Douleur au bas du ventre.",urine:"!Globules blancs et nitrites dans les urines.",sang:"!Signes d'infection bactérienne."}},
-  migraine:{nom:"Migraine",sv:"consult",tri:"vert",s:["tete","nausees","lumiere"],t:{examen:"Tension normale. Examen neurologique normal.",scanner:"Scanner du crâne normal."}},
+  migraine:{nom:"Migraine",sv:"consult",tri:"vert",s:["tete","nausees","lumiere"],t:{examen:"Tension normale. Examen neurologique normal.",scanner:"Scanner du crâne normal.",irm:"IRM du cerveau normale."}},
   hypertension:{nom:"Hypertension",sv:"consult",tri:"vert",s:["tete","vertiges","fatigue"],t:{examen:"!Tension très élevée : 18/11.",ecg:"Tracé normal.",sang:"Bilan sanguin normal."}},
   diabete:{nom:"Diabète",sv:"consult",tri:"vert",s:["fatigue","soif","pipi"],t:{examen:"Tension et température normales.",sang:"!Glycémie très élevée.",urine:"!Sucre dans les urines."}},
   anemie:{nom:"Anémie",sv:"consult",tri:"vert",s:["fatigue","paleur","souffle","vertiges"],t:{examen:"!Pâleur nette, pouls rapide.",sang:"!Hémoglobine basse.",ecg:"Tracé normal, rythme un peu rapide."}},
-  lumbago:{nom:"Lumbago",sv:"consult",tri:"bleu",s:["dos","raideur"],t:{examen:"!Muscles du bas du dos contractés. Pas de trouble nerveux.",radio:"Radio de la colonne normale.",urine:"Analyse d'urine normale."}},
+  lumbago:{nom:"Lumbago",sv:"consult",tri:"bleu",s:["dos","raideur"],t:{examen:"!Muscles du bas du dos contractés. Pas de trouble nerveux.",radio:"Radio de la colonne normale.",urine:"Analyse d'urine normale.",irm:"Pas de hernie discale."}},
   allergie:{nom:"Allergie saisonnière",sv:"consult",tri:"bleu",s:["nez","eternue","yeux"],t:{examen:"Pas de fièvre. Yeux rouges et larmoyants.",rapide:"Tests grippe et streptocoque négatifs.",sang:"!Marqueurs d'allergie élevés."}},
   plaie:{nom:"Plaie superficielle",sv:"soins",tri:"bleu",s:["plaie","douleur"],t:{examen:"!Plaie nette et peu profonde, à refermer.",radio:"Pas de corps étranger."}},
   brulure:{nom:"Brûlure légère",sv:"soins",tri:"bleu",s:["brulure","rougeur","douleur"],t:{examen:"!Brûlure du premier degré, sans cloque."}},
@@ -337,7 +344,7 @@ var MALADIES={
   fracture:{nom:"Fracture de la cheville",sv:"urgences",tri:"jaune",s:["cheville","gonflement","marche"],t:{examen:"!Cheville gonflée et déformée. Appui impossible.",radio:"!Fracture visible."}},
   angoisse:{nom:"Crise d'angoisse",sv:"urgences",tri:"jaune",s:["thorax","palpit","souffle"],t:{examen:"Pouls rapide. Auscultation normale.",ecg:"Tracé normal.",sang:"Enzymes du cœur normales."}},
   pneumonie:{nom:"Pneumonie",sv:"urgences",tri:"jaune",sejour:[1,2],s:["fievre","toux","souffle","thorax"],t:{examen:"!39,5 °C. Râles à l'auscultation.",rapide:"Tests grippe et streptocoque négatifs.",sang:"!Signes d'infection bactérienne.",radio:"!Foyer d'infection dans le poumon droit."}},
-  commotion:{nom:"Commotion cérébrale",sv:"urgences",tri:"jaune",c:"A reçu un coup sur la tête",s:["tete","vertiges","nausees"],t:{examen:"!Légère confusion. Pupilles normales.",scanner:"Pas de saignement dans le crâne."}},
+  commotion:{nom:"Commotion cérébrale",sv:"urgences",tri:"jaune",c:"A reçu un coup sur la tête",s:["tete","vertiges","nausees"],t:{examen:"!Légère confusion. Pupilles normales.",scanner:"Pas de saignement dans le crâne.",irm:"Pas de lésion du cerveau."}},
   colique:{nom:"Colique néphrétique",sv:"urgences",tri:"orange",s:["flanc","nausees","urines"],t:{examen:"!Douleur vive quand on tape sur le flanc.",urine:"!Sang dans les urines.",echo:"!Calcul dans les voies urinaires."}},
   asthme:{nom:"Crise d'asthme",sv:"urgences",tri:"orange",s:["souffle","toux","sifflement"],t:{examen:"!Sifflements à l'auscultation. Oxygène un peu bas.",radio:"Radio des poumons normale.",ecg:"Tracé normal."}},
   appendicite:{nom:"Appendicite",sv:"chirurgie",tri:"orange",s:["ventre","fievre","nausees"],t:{examen:"!Ventre douloureux, surtout à droite.",sang:"!Signes d'infection bactérienne.",echo:"!Appendice gonflé.",urine:"Analyse d'urine normale."}},
@@ -354,23 +361,37 @@ var MALADIES={
   bronchiolite:{nom:"Bronchiolite",sv:"pediatrie",tri:"jaune",s:["toux","souffle","sifflement"],t:{examen:"!Sifflements, l'enfant peine à respirer.",rapide:"!Test du virus de la bronchiolite positif.",radio:"Radio des poumons normale."}},
   infarctus:{nom:"Infarctus",sv:"rea",tri:"rouge",s:["thorax","souffle","sueurs"],t:{examen:"!Pâleur, sueurs, tension basse.",ecg:"!Tracé d'infarctus.",sang:"!Enzymes du cœur très élevées."}},
   embolie:{nom:"Embolie pulmonaire",sv:"rea",tri:"rouge",s:["thorax","souffle","palpit"],t:{examen:"!Pouls rapide. Oxygène bas.",ecg:"Rythme rapide, sans signe d'infarctus.",sang:"!Marqueurs de caillot élevés.",scanner:"!Caillot dans une artère du poumon."}},
-  avc:{nom:"AVC",sv:"rea",tri:"rouge",s:["paralysie","parole","tete"],t:{examen:"!Un côté du corps répond mal.",scanner:"!AVC visible."}},
+  avc:{nom:"AVC",sv:"rea",tri:"rouge",s:["paralysie","parole","tete"],t:{examen:"!Un côté du corps répond mal.",scanner:"!AVC visible.",irm:"!Zone du cerveau privée de sang."}},
   septicemie:{nom:"Septicémie",sv:"rea",tri:"rouge",s:["fievre","confusion","frissons","souffle"],t:{examen:"!40 °C, tension très basse.",sang:"!Infection grave dans le sang."}},
   chaleur:{nom:"Coup de chaleur",sv:"urgences",tri:"orange",saison:2,s:["fievre","vertiges","soif","confusion"],t:{examen:"!40 °C, peau chaude et sèche.",sang:"!Déshydratation marquée.",ecg:"Rythme rapide, sans autre anomalie."}},
-  meningite:{nom:"Méningite",sv:"rea",tri:"rouge",s:["fievre","tete","nuque","lumiere"],t:{examen:"!39,8 °C. Nuque raide.",sang:"!Signes d'infection bactérienne.",scanner:"Scanner du crâne normal."}}
+  meningite:{nom:"Méningite",sv:"rea",tri:"rouge",s:["fievre","tete","nuque","lumiere"],t:{examen:"!39,8 °C. Nuque raide.",sang:"!Signes d'infection bactérienne.",scanner:"Scanner du crâne normal.",irm:"!Inflammation des méninges."}},
+  angor:{nom:"Angine de poitrine",sv:"cardio",tri:"jaune",s:["thorax","effort","souffle"],t:{examen:"Auscultation normale au repos.",ecg:"!Signes de manque d'oxygène du cœur.",sang:"Enzymes du cœur normales.",echo:"Cœur de taille normale."}},
+  insuffisance:{nom:"Insuffisance cardiaque",sv:"cardio",tri:"jaune",sejour:[2,4],s:["souffle","gonflement","fatigue"],t:{examen:"!Chevilles gonflées, râles aux poumons.",echo:"!Le cœur pompe mal.",radio:"!Liquide dans les poumons.",sang:"!Marqueur d'insuffisance cardiaque élevé."}},
+  arythmie:{nom:"Fibrillation auriculaire",sv:"cardio",tri:"jaune",s:["palpit","vertiges","fatigue"],t:{examen:"!Pouls irrégulier.",ecg:"!Rythme complètement irrégulier.",sang:"Bilan sanguin normal.",echo:"Cœur de taille normale."}},
+  depression:{nom:"Dépression",sv:"psy",tri:"vert",s:["tristesse","fatigue","insomnie"],t:{examen:"!Humeur très basse depuis des semaines, plus envie de rien.",sang:"Bilan sanguin normal."}},
+  anxiete:{nom:"Trouble anxieux",sv:"psy",tri:"vert",s:["inquiet","insomnie","palpit"],t:{examen:"!Anxiété présente presque tous les jours depuis des mois.",ecg:"Tracé normal.",sang:"Bilan sanguin normal."}},
+  burnout:{nom:"Épuisement professionnel",sv:"psy",tri:"bleu",s:["fatigue","irritable","insomnie"],t:{examen:"!Épuisement lié au travail, sans tristesse profonde.",sang:"Bilan sanguin normal."}},
+  carie:{nom:"Carie",sv:"dentaire",tri:"bleu",s:["dent","douleur"],t:{examen:"!Dent noircie, sensible au froid.",radio:"!Carie profonde."}},
+  abces:{nom:"Abcès dentaire",sv:"dentaire",tri:"vert",s:["dent","gonflement","fievre"],t:{examen:"!Joue gonflée autour d'une dent.",radio:"!Infection à la racine.",sang:"!Signes d'infection bactérienne."}},
+  sagesse:{nom:"Dent de sagesse incluse",sv:"dentaire",tri:"vert",s:["machoire","dent","gonflement"],t:{examen:"!Gencive gonflée au fond de la bouche.",radio:"!Dent de sagesse coincée dans l'os."}},
+  cancerpoumon:{nom:"Cancer du poumon",sv:"onco",tri:"jaune",s:["toux","souffle","amaigri","fatigue"],t:{examen:"!Amaigrissement net.",radio:"!Masse dans le poumon.",scanner:"!Tumeur de 4 cm.",sang:"Bilan sanguin un peu perturbé."}},
+  leucemie:{nom:"Leucémie",sv:"onco",tri:"orange",sejour:[3,5],s:["fatigue","paleur","bleus","fievre"],t:{examen:"!Pâleur, bleus sur les bras.",sang:"!Globules blancs anormaux en très grand nombre."}},
+  cancersein:{nom:"Cancer du sein",sv:"onco",tri:"jaune",femme:true,s:["boule","fatigue","amaigri"],t:{examen:"!Boule dure dans le sein.",echo:"!Masse suspecte.",irm:"!Tumeur confirmée."}}
 };
 // La pharmacie : chaque maladie a son traitement, pris dans le stock au début des soins et facturé au patient avec une marge.
 var PRODUITS={
   antidouleur:{nom:"Antidouleurs",cout:2},antibiotique:{nom:"Antibiotiques",cout:5},inhalateur:{nom:"Inhalateurs",cout:8},rehydratation:{nom:"Solutés de réhydratation",cout:3},
   antimigraineux:{nom:"Antimigraineux",cout:6},antihypertenseur:{nom:"Antihypertenseurs",cout:5},antidiabetique:{nom:"Antidiabétiques",cout:7},fer:{nom:"Fer",cout:3},
   antiinflammatoire:{nom:"Anti-inflammatoires",cout:3},antihistaminique:{nom:"Antihistaminiques",cout:3},pansement:{nom:"Pansements et sutures",cout:2},platre:{nom:"Plâtres et attelles",cout:12},
-  anxiolytique:{nom:"Calmants",cout:4},anticoagulant:{nom:"Anticoagulants",cout:30},bloc:{nom:"Matériel de bloc opératoire",cout:300},accouchement:{nom:"Kits d'accouchement",cout:200}};
+  anxiolytique:{nom:"Calmants",cout:4},anticoagulant:{nom:"Anticoagulants",cout:30},bloc:{nom:"Matériel de bloc opératoire",cout:300},accouchement:{nom:"Kits d'accouchement",cout:200},
+  betabloquant:{nom:"Bêtabloquants",cout:6},diuretique:{nom:"Diurétiques",cout:4},antidepresseur:{nom:"Antidépresseurs",cout:8},dentaire:{nom:"Matériel dentaire",cout:15},chimio:{nom:"Chimiothérapie",cout:1200}};
 var TRAITEMENTS={grippe:"antidouleur",angine:"antibiotique",rhume:"antidouleur",bronchite:"inhalateur",gastro:"rehydratation",cystite:"antibiotique",migraine:"antimigraineux",hypertension:"antihypertenseur",
   diabete:"antidiabetique",anemie:"fer",lumbago:"antiinflammatoire",allergie:"antihistaminique",plaie:"pansement",brulure:"pansement",entorse:"platre",piqure:"antihistaminique",
   fracture:"platre",angoisse:"anxiolytique",chaleur:"rehydratation",pneumonie:"antibiotique",commotion:"repos",colique:"antiinflammatoire",asthme:"inhalateur",
   appendicite:"bloc",vesicule:"bloc",hernie:"bloc",femur:"bloc",accouchement:"accouchement",fauxtravail:"repos",preeclampsie:"antihypertenseur",
   otite:"antibiotique",varicelle:"antihistaminique",rougeole:"antidouleur",scarlatine:"antibiotique",bronchiolite:"inhalateur",
-  infarctus:"anticoagulant",embolie:"anticoagulant",avc:"anticoagulant",septicemie:"antibiotique",meningite:"antibiotique"};
+  infarctus:"anticoagulant",embolie:"anticoagulant",avc:"anticoagulant",septicemie:"antibiotique",meningite:"antibiotique",
+  angor:"betabloquant",insuffisance:"diuretique",arythmie:"anticoagulant",depression:"antidepresseur",anxiete:"anxiolytique",burnout:"repos",carie:"dentaire",abces:"antibiotique",sagesse:"dentaire",cancerpoumon:"chimio",leucemie:"chimio",cancersein:"chimio"};
 Object.keys(MALADIES).forEach(function(k){ MALADIES[k].tr=TRAITEMENTS[k]||"repos"; });
 var STOCK_DEPART=8, LOT=10, GROS_LOT=50, REMISE_GROS=0.85, SURCOUT_AUTO=1.15, SEUIL_STOCK=3, DELAI_LIVRAISON=30*MIN, MARGE_HABITUELLE=30;
 // L'argent personnel du directeur : formations, placement en bourse, prêt à l'hôpital, dons et vie personnelle
@@ -394,14 +415,29 @@ var MATERIEL=[
   ["informatique","Logiciel d'accueil",1200,0,"Chaque niveau : un secrétaire accueille 25 % de patients en plus."],
   ["entretien","Machines de nettoyage",1000,0,"Chaque niveau : un agent d'entretien couvre 25 % de patients en plus."],
   ["ambulance","Ambulances",3000,1,"Chaque niveau : 10 % de patients en plus pour les services d'urgence."],
-  ["bloc","Bloc opératoire",6000,2,"Chaque niveau : les opérations durent 15 % moins longtemps."]];
+  ["bloc","Bloc opératoire",6000,2,"Chaque niveau : les opérations durent 15 % moins longtemps."],
+  ["irm","IRM",15000,3,"Niveau 1 : débloque l'examen IRM, le plus précis pour le cerveau, le dos et les tumeurs. Chaque niveau : vos médecins se trompent moins ; à partir du niveau 2, l'IRM est 20 % plus rapide par niveau."],
+  ["heliport","Héliport",20000,3,"Chaque niveau : 20 % de cas graves en plus en soins intensifs et en cardiologie. Une partie arrive en hélicoptère, avec un forfait de transport de {800} facturé."],
+  ["aile","Nouvelle aile",25000,1,"Chaque niveau : 10 lits d'hospitalisation en plus, déjà installés, et 8 % de patients en plus.","bat"],
+  ["parking","Parking payant",4000,0,"Chaque niveau : chaque patient qui arrive paie {3} de parking.","bat"],
+  ["cafeteria","Cafétéria",3000,0,"Chaque niveau : chaque patient qui arrive y dépense {4}, et repart un peu plus satisfait.","bat"]];
+var LITS_AILE=10, FORFAIT_HELICO=800;
+// Le centre de recherche : une étude à la fois, payée au lancement ; une fois terminée, son effet est acquis pour toujours
+var RECHERCHE_COUT=30000, RECHERCHE_ENTRETIEN=300, RECHERCHE_PALIER=3;
+var ETUDES=[
+  ["prevention","Programme de prévention",10000,3,"Tous les patients repartent un peu plus satisfaits."],
+  ["diag","Diagnostic assisté par ordinateur",15000,3,"Vos médecins se trompent beaucoup moins quand ils diagnostiquent seuls."],
+  ["antibio","Nouveaux antibiotiques",20000,4,"30 % de complications en moins après les soins."],
+  ["miniinvasif","Chirurgie mini-invasive",25000,5,"Les séjours après une opération durent un jour de moins."],
+  ["thrombolyse","Protocole AVC et infarctus",30000,5,"Deux fois moins de décès parmi les cas les plus graves."],
+  ["immuno","Immunothérapie",50000,7,"Les séjours en oncologie durent un jour de moins, et les patients en sortent bien plus satisfaits."]];
 var NIVEAU_MAX=3, COUT_NIVEAU=[1,2,4], PART_ENTRETIEN=0.01;
 // L'expérience : un point par patient soigné ou par examen, quelques points par poste travaillé.
 // À 60 points un junior devient confirmé, à 250 un confirmé devient senior. Un stage payé par l'hôpital donne 50 points.
 var SEUILS_XP=[0,60,250], XP_STAGE=50, XP_POSTE_SOIGNANT=1, XP_POSTE_AUTRE=4;
 // Le planning se lit par groupe de métiers
 var GROUPES_PLANNING=[
-  ["medecins","Médecins","Médecins prévus",["generaliste","chef","urgentiste","radiologue","chirurgien","pediatre","reanimateur"]],
+  ["medecins","Médecins","Médecins prévus",["generaliste","chef","urgentiste","radiologue","chirurgien","pediatre","reanimateur","dentiste","cardiologue","psychiatre","oncologue"]],
   ["infirmiers","Infirmiers","Infirmiers prévus",["infirmier","sagefemme"]],
   ["autres","Autres","Accueil et entretien prévus",["secretaire","agent"]]];
 // Absences : chaque nuit, une personne peut tomber malade (1 à 3 jours) ou demander un congé (2 à 5 jours, dans 3 jours).
@@ -412,7 +448,7 @@ var TAUX_MALADIE=0.02, TAUX_CONGE=0.012, PRIME_INTERIM=1.5, DELAI_CONGE=3, QUALI
 var ORDRE_TRI=["bleu","vert","jaune","orange","rouge"], ETAPES_AGGRAVATION=[0.6,0.9];
 var RISQUE_COMPLICATION={bleu:0,vert:0.005,jaune:0.02,orange:0.05,rouge:0.10}, MORTELLES=["infarctus","embolie","avc","septicemie","meningite"];
 // L'hôpital est assuré : une prime chaque jour selon le palier, et l'assurance prend en charge 70 % des indemnités
-var PRIME_ASSURANCE=[10,25,50,90], FRANCHISE=0.3, FRAIS_JUSTICE=300;
+var PRIME_ASSURANCE=[10,25,50,90,140], FRANCHISE=0.3, FRAIS_JUSTICE=300;
 // Les saisons (0 hiver, 1 printemps, 2 été, 3 automne) rendent certaines maladies plus ou moins fréquentes
 var SAISONS=[
   {nom:"Hiver",txt:"grippes, bronchites et chutes sur le verglas",m:{grippe:2.2,bronchite:1.8,rhume:1.6,angine:1.5,pneumonie:1.8,bronchiolite:2.2,femur:1.5,fracture:1.4,otite:1.5,allergie:0.2,piqure:0.2}},
@@ -423,7 +459,7 @@ var SAISONS=[
 var BAREME=2, ANCIENS_PRIX={chirurgie:400,maternite:300,rea:600,lit:80}, ANCIENS_SALAIRES={chirurgien:260,sagefemme:110,reanimateur:280};
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; if(MALADIES[k].saison===undefined) NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
-var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","pediatrie","rea"];
+var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","dentaire","pediatrie","rea","cardio","psy","onco"];
 // Les métiers : salaire habituel par jour (pour 8 heures), service de rattachement, atouts utiles au poste
 var ROLES={
   generaliste:{nom:"Médecin généraliste",f:"Médecin généraliste",pluriel:"Médecins généralistes",salaire:120,service:"consult",palier:0,atouts:["instruit","contact"]},
@@ -436,7 +472,11 @@ var ROLES={
   chirurgien:{nom:"Chirurgien",f:"Chirurgienne",pluriel:"Chirurgiens",salaire:520,service:"chirurgie",palier:2,atouts:["sangfroid","mains"]},
   sagefemme:{nom:"Sage-femme",f:"Sage-femme",pluriel:"Sages-femmes",salaire:180,service:"maternite",palier:2,atouts:["patient","sangfroid"]},
   pediatre:{nom:"Pédiatre",f:"Pédiatre",pluriel:"Pédiatres",salaire:150,service:"pediatrie",palier:3,atouts:["patient","contact"]},
-  reanimateur:{nom:"Médecin réanimateur",f:"Médecin réanimatrice",pluriel:"Médecins réanimateurs",salaire:560,service:"rea",palier:3,atouts:["sangfroid","instruit"]}
+  reanimateur:{nom:"Médecin réanimateur",f:"Médecin réanimatrice",pluriel:"Médecins réanimateurs",salaire:560,service:"rea",palier:3,atouts:["sangfroid","instruit"]},
+  dentiste:{nom:"Dentiste",f:"Dentiste",pluriel:"Dentistes",salaire:200,service:"dentaire",palier:2,atouts:["mains","contact"]},
+  cardiologue:{nom:"Cardiologue",f:"Cardiologue",pluriel:"Cardiologues",salaire:400,service:"cardio",palier:3,atouts:["instruit","sangfroid"]},
+  psychiatre:{nom:"Psychiatre",f:"Psychiatre",pluriel:"Psychiatres",salaire:160,service:"psy",palier:3,atouts:["patient","contact"]},
+  oncologue:{nom:"Oncologue",f:"Oncologue",pluriel:"Oncologues",salaire:600,service:"onco",palier:4,atouts:["instruit","patient"]}
 };
 // Le planning : trois postes de 8 heures. Chaque personne a une semaine type, un poste ou un repos par jour.
 var POSTES={M:{nom:"Matin",court:"Mat",h:"6 h – 14 h"},A:{nom:"Après-midi",court:"Apm",h:"14 h – 22 h"},N:{nom:"Nuit",court:"Nuit",h:"22 h – 6 h"},R:{nom:"Repos",court:"–",h:""}};
@@ -444,7 +484,7 @@ var ROLES_JOUR=["secretaire","agent"], QUALITE_GARDE=0.8, LENT_AUTRE=1.5, LENT_G
 function deJour(e){ return ROLES_JOUR.indexOf(e.role)>=0; }
 var CYCLE_POSTES={M:"A",A:"N",N:"R",R:"M"}, FENETRES=[["M",6.5,14],["A",14,22],["N",22,30]], PRIME_NUIT=1.25;
 var JOURS_COURTS=["Lu","Ma","Me","Je","Ve","Sa","Di"], JOURS_NOMS=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
-var ORDRE_ROLES=["generaliste","chef","infirmier","secretaire","agent","urgentiste","radiologue","chirurgien","sagefemme","pediatre","reanimateur"];
+var ORDRE_ROLES=["generaliste","chef","infirmier","secretaire","agent","urgentiste","radiologue","chirurgien","sagefemme","dentiste","pediatre","reanimateur","cardiologue","psychiatre","oncologue"];
 var ATOUTS={instruit:"Instruit",contact:"Sens du contact",patient:"Patient",sangfroid:"Sang-froid",endurant:"Endurant",rigoureux:"Rigoureux",mains:"Habile de ses mains",chiffres:"Bon avec les chiffres"};
 // L'expérience : un junior coûte moins cher, un senior soigne plus vite et mieux
 var EXP=[{nom:"Junior",paie:0.85,qualite:0.88,vitesse:1.15,age:[24,30]},{nom:"Confirmé",f:"Confirmée",paie:1,qualite:1,vitesse:1,age:[30,45]},{nom:"Senior",paie:1.2,qualite:1.12,vitesse:0.85,age:[45,62]}];
@@ -458,7 +498,7 @@ var TYPES_D=[["s","Salaires"],["o","Cotisations patronales"],["f","Fournitures m
 var PART_PATIENT=0.4, DELAI_MUTUELLE=[5,8], TAUX_CONTESTE=0.25, DELAI_RELANCE=5, LIMITE_CONTESTE=20, DECOUVERT_MAX=3000;
 // L'employeur paie 25 % de cotisations sur les salaires. Les achats durables sont amortis sur cinq ans.
 var TAUX_COTISATIONS=0.25, DUREE_AMORT=5*365;
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"],deces:["Décédé","bad"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
@@ -474,7 +514,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -497,6 +537,13 @@ function migrer(){
   if(S.fondeLe&&!S.bonusMoi){
     S.bonusMoi=1;
     if(S.moi){ S.moi.argent+=50000; noter(S.horloge||Date.now(),"ok","Vous recevez "+mt(50000)+" sur votre compte personnel."); }
+  }
+  // Parties commencées avant la grande extension : nouveaux tarifs, nouveaux métiers, centre de recherche
+  if(S.postes) Object.keys(ROLES).forEach(function(k){ if(!S.postes[k]) S.postes[k]={salaire:ROLES[k].salaire,heures:8}; });
+  if(S.tarifs) Object.keys(SERVICES).forEach(function(k){ if(S.tarifs[k]===undefined) S.tarifs[k]=SERVICES[k].prix; });
+  if(!S.recherche){
+    S.recherche={ouvert:0,en:null,faits:{}};
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : Dentisterie, Cardiologie, Psychiatrie et Oncologie, l'IRM et l'héliport, l'agrandissement du bâtiment, un 5e palier et le centre de recherche.");
   }
   if(S.bareme!==BAREME){
     Object.keys(ANCIENS_PRIX).forEach(function(k){ var neuf=k==="lit"?REF_LIT:SERVICES[k].prix; if(S.tarifs[k]!==undefined) S.tarifs[k]=Math.round(S.tarifs[k]/ANCIENS_PRIX[k]*neuf/10)*10; });
@@ -656,13 +703,14 @@ function noter(t,classe,texte){ S.journal.unshift({t:t,c:classe,m:texte}); if(S.
 function reputation(){ var n=0, i; for(i=0;i<S.avis.length;i++) n+=S.avis[i]; return S.avis.length?n/S.avis.length:50; }
 function avis(note){ S.avis.push(borne(Math.round(note),0,100)); if(S.avis.length>AVIS_MAX) S.avis.shift(); }
 function niv(k){ return (S.materiel&&S.materiel[k])||0; }
+function fait(k){ return !!(S.recherche&&S.recherche.faits&&S.recherche.faits[k]); }
 function entretienMateriel(){
   var n=0;
   MATERIEL.forEach(function(m){ for(var i=0;i<niv(m[0]);i++) n+=m[2]*COUT_NIVEAU[i]*PART_ENTRETIEN; });
   return Math.round(n);
 }
 // Le délai d'un test, en minutes réelles. Le laboratoire raccourcit ceux qui passent par lui.
-function delaiTest(k){ var T=TESTS[k]; return Math.round(T.delai*(T.labo?1-0.2*niv("labo"):1)); }
+function delaiTest(k){ var T=TESTS[k]; return Math.round(T.delai*(T.labo?1-0.2*niv("labo"):1)*(T.materiel?1-0.2*Math.max(0,niv(T.materiel)-1):1)); }
 function testPret(p,k,t){ return !!p.tests[k]&&p.tests[k]<=(t===undefined?maintenant():t); }
 function testsEnCours(p,t){ var fin=0, k; for(k in p.tests) if(p.tests[k]>t&&p.tests[k]>fin) fin=p.tests[k]; return fin; }
 function coutTest(k){ var T=TESTS[k]; return T.imagerie||!T.cout?T.cout:Math.max(1,Math.round(T.cout*(1-0.2*niv("labo")))); }
@@ -679,7 +727,7 @@ function tirerMaladie(liste,t){
 function saisonMaladie(k){ var l=[]; SAISONS.forEach(function(x,i){ if((MALADIES[k].saison===i)||(x.m[k]||1)>=1.5) l.push(x.nom.toLowerCase()); }); return l; }
 function forme(k){ return !!(S.moi.formations&&S.moi.formations[k]); }
 function bonusPlaque(){ var n=0; PLAQUES.forEach(function(x){ if(S.moi.dons>=x[0]) n=x[2]; }); return n; }
-function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1); }
+function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1)*(1+0.08*niv("aile")); }
 function chargesBatiment(){ return Math.round(PALIERS[S.palier].charges*(forme("gestionnaire")?0.85:1)); }
 function nb(role){ var n=0, i; for(i=0;i<S.equipe.length;i++) if(S.equipe[i].role===role) n++; return n; }
 function soignantsDe(sv){ var n=0; SERVICES[sv].roles.forEach(function(r){ n+=nb(r); }); return n; }
@@ -798,7 +846,7 @@ function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie);
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMateriel()+PRIME_ASSURANCE[S.palier], k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 // La mutuelle rembourse une somme fixe : 60 % du prix habituel, jamais plus que le prix demandé.
 // Tout ce qui dépasse est un supplément, payé par le patient. C'est à ce qu'il paie de sa poche qu'il réagit.
 function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
@@ -852,10 +900,12 @@ function creerPatient(t,force){
     k=k||cles[0];
   }
   m=MALADIES[k]; sv=SERVICES[m.sv];
-  p=identite(sv.femme?true:Math.random()<0.5);
+  p=identite(sv.femme||m.femme?true:Math.random()<0.5);
   p.age=sv.enfant?entre(1,14):sv.femme?entre(20,41):entre(18,88);
   sej=m.sejour!==undefined?m.sejour:(sv.sejour||null);
   p.id=S.nPatient++; p.sv=m.sv; p.mal=k; p.tri=m.tri; p.arrive=t; p.sejour=sej?entre(sej[0],sej[1]):0; p.paye=0; p.attente=0; p.tests={};
+  if(p.sejour&&((p.sv==="chirurgie"&&fait("miniinvasif"))||(p.sv==="onco"&&fait("immuno")))) p.sejour=Math.max(1,p.sejour-1);
+  if((p.sv==="rea"||p.sv==="cardio")&&Math.random()<0.15*niv("heliport")) p.heli=1;
   p.symptomes=m.s.slice().sort(function(){ return Math.random()-0.5; }).slice(0,Math.random()<0.5?2:3);
   return p;
 }
@@ -868,6 +918,7 @@ function ranger(p,t,issue){
 function accueillir(p,t){
   S.stat.arrives++;
   p.pat=Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente")))*MIN;
+  if(niv("parking")||niv("cafeteria")) inscrire(t,"r:annexes",3*niv("parking")+4*niv("cafeteria"));
   p.etat="diag"; p.limite=t+p.pat; p.auto=t+DELAI_DIAG; p.aggr=0; p.pire=t+Math.round(p.pat*ETAPES_AGGRAVATION[0]);
   S.patients.push(p);
 }
@@ -889,6 +940,7 @@ function testDispo(k){
     if(SERVICES.imagerie.palier>S.palier) return "Palier "+PALIERS[SERVICES.imagerie.palier].nom;
     if(!S.ouverts.imagerie) return "Service Imagerie fermé";
     if(T.palier&&S.palier<T.palier) return "Palier "+PALIERS[T.palier].nom;
+    if(T.materiel&&!niv(T.materiel)) return "Il faut acheter une IRM (Matériel)";
     if(!radiologueLibre()) return nb("radiologue")?"Aucun radiologue en poste":"Il faut un radiologue";
   }
   return "";
@@ -928,7 +980,7 @@ function diagnostiquerSeul(p,t){
   // Le médecin attend les résultats avant de trancher
   fin=testsEnCours(p,t);
   if(fin){ p.auto=fin+MIN; p.limite=Math.max(p.limite,p.auto+10*MIN); return; }
-  ok=Math.random()<borne(0.6+0.3*(utiles.length?faits/utiles.length:1)+(q-1)*0.4+0.06*niv("labo"),0.45,0.97);
+  ok=Math.random()<borne(0.6+0.3*(utiles.length?faits/utiles.length:1)+(q-1)*0.4+0.06*niv("labo")+0.03*niv("irm")+(fait("diag")?0.1:0),0.45,0.98);
   orienter(p,t,ok,true,ok?bon:optionsTraitement(p,p.mal).filter(function(x){ return x!==bon; })[0],ok);
 }
 // Les maladies que les symptômes du patient peuvent évoquer
@@ -980,7 +1032,7 @@ function satisfaction(p,q){
   n-=(p.aggr||0)*8;
   if(p.servi===1&&S.pharma.marge>MARGE_HABITUELLE) n-=(S.pharma.marge-MARGE_HABITUELLE)*0.15;
   n-=(p.inutiles||0)*5;
-  n+=bonusPlaque();
+  n+=bonusPlaque()+2*niv("cafeteria")+(fait("prevention")?4:0)+(p.sv==="onco"&&fait("immuno")?10:0);
   return borne(n,0,100);
 }
 function porterPlainte(p,t,chance,min,max,motif){
@@ -1001,15 +1053,16 @@ function finSoin(p,t){
   var sv=SERVICES[p.sv], part=MALADIES[p.mal].p||1, e=parId(S.equipe,p.soignant), prix=Math.round(S.tarifs[p.sv]*part), q=e?qualite(e)-(p.lent?0.15:0):p.garde?QUALITE_GARDE:1, faute=p.traitOk===false||!!p.rupture, note, risque;
   if(e){ e.occupe=null; e.soignes=(e.soignes||0)+1; if(!remplace(e,t)) gagnerXp(e,1,t); }
   // Le risque de complication dépend de la gravité, d'une erreur de traitement, d'une rupture de stock et du soignant
-  risque=(RISQUE_COMPLICATION[p.tri]||0)*(p.traitOk===false?3:1)*(p.rupture?2:1)/Math.max(0.7,q);
+  risque=(RISQUE_COMPLICATION[p.tri]||0)*(p.traitOk===false?3:1)*(p.rupture?2:1)*(fait("antibio")?0.7:1)/Math.max(0.7,q);
   if(Math.random()<risque){
-    if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<(p.traitOk===false?0.35:0.12)){ deces(p,t,"pendant les soins",faute); affecter(t); return; }
+    if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<(p.traitOk===false?0.35:0.12)*(fait("thrombolyse")?0.5:1)){ deces(p,t,"pendant les soins",faute); affecter(t); return; }
     p.complication=1; p.sejour=(p.sejour||0)+2; S.stat.complications=(S.stat.complications||0)+1; S.medical.complications++;
     noter(t,"warn","Complication pour "+nomComplet(p)+" ("+MALADIES[p.mal].nom.toLowerCase()+") : deux jours d'hospitalisation de plus.");
     porterPlainte(p,t,faute?0.25:0.03,500,1500,"complication après les soins");
   }
   facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
   p.paye+=prix; S.soignes++; S.stat.soignes++;
+  if(p.heli){ facturer(t,"r:"+p.sv,FORFAIT_HELICO,FORFAIT_HELICO); p.paye+=FORFAIT_HELICO; }
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
   if(p.sejour){
@@ -1025,7 +1078,7 @@ function sortir(p,t){
 }
 function partir(p,t){
   // Un cas vital que personne n'a pris en charge à temps peut mourir
-  if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<0.5){ deces(p,t,"faute de prise en charge à temps",true); return; }
+  if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<(fait("thrombolyse")?0.25:0.5)){ deces(p,t,"faute de prise en charge à temps",true); return; }
   S.stat.partis++;
   if(p.etat==="diag") S.stat.sansDiag++; else S.stat.sansSoin[p.sv]=(S.stat.sansSoin[p.sv]||0)+1;
   avis(10); ranger(p,t,"parti");
@@ -1058,7 +1111,7 @@ function planifierJour(debut,apres,nuitSeule){
       var reduit=1;
       if(S.ouverts[sv]){ if(!prevusLe(sv,j,F[0],debut+(F[1]+1)*HEURE)) reduit=soignantsLe(j,F[0],debut+(F[1]+1)*HEURE)?0.5:0.25; }
       else if(F[0]==="N"||!soignantsLe(j,F[0],debut+(F[1]+1)*HEURE)) return;
-      n=reduit*base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*fs*demande(sv); n=Math.floor(n)+(Math.random()<n%1?1:0);
+      n=reduit*base*SERVICES[sv].poids/total*partDe(sv,F[0])*alea(0.8,1.2)*(SERVICES[sv].vital?1+0.1*niv("ambulance"):1)*(sv==="rea"||sv==="cardio"?1+0.2*niv("heliport"):1)*fs*demande(sv); n=Math.floor(n)+(Math.random()<n%1?1:0);
       fin=F[2];
       for(i=0;i<n;i++){ t=debut+Math.round(alea(F[1],fin)*HEURE); if(t>apres){ S.arrivees.push({t:t,mal:tirerMaladie(l,t)}); compte++; } }
     });
@@ -1163,6 +1216,14 @@ function cloturer(t){
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT);
   inscrire(tj,"e:materiel",entretienMateriel());
+  if(S.recherche&&S.recherche.ouvert){
+    inscrire(tj,"e:recherche",RECHERCHE_ENTRETIEN);
+    if(S.recherche.en&&S.recherche.en.fin<=t){
+      var et=ETUDES.filter(function(x){ return x[0]===S.recherche.en.k; })[0];
+      S.recherche.faits[S.recherche.en.k]=1; S.recherche.en=null;
+      if(et){ avis(90); avis(90); avis(90); noter(tj,"ok","Recherche : l'étude « "+et[1]+" » aboutit. "+et[4]+" Les publications font parler de l'hôpital."); }
+    }
+  }
   if(S.portes) inscrire(tj,"e:plaintes",PRIME_ASSURANCE[S.palier]);
   S.patients.forEach(function(p){ if(p.etat==="lit"){ facturer(tj,"r:lits",S.tarifs.lit,REF_LIT); p.paye+=S.tarifs.lit; } });
   amortir(tj);
@@ -1261,6 +1322,11 @@ var I={
   calendrier:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4M8 14h3M13 14h3M8 17h3"/></svg>',
   outil:'<svg viewBox="0 0 24 24"><path d="M14.5 6.5a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3zM14.5 6.5l3-3M7 4l2 2M4 7l2 2M5.5 5.5l5 5"/></svg>',
   pilule:'<svg viewBox="0 0 24 24"><path d="M10.5 20.5a5 5 0 0 1-7-7l7-7a5 5 0 0 1 7 7zM7 10l7 7M17 3.5l3.5 3.5M15.5 5l3.5 3.5"/></svg>',
+  pouls:'<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>',
+  cerveau:'<svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-5.5 1.5A3 3 0 0 0 4 11a3 3 0 0 0 1.5 4.5A3 3 0 0 0 9 19.5a3 3 0 0 0 3-1.5zM12 5a3 3 0 0 1 5.5 1.5A3 3 0 0 1 20 11a3 3 0 0 1-1.5 4.5A3 3 0 0 1 15 19.5a3 3 0 0 1-3-1.5z"/></svg>',
+  dent:'<svg viewBox="0 0 24 24"><path d="M7 3C4.5 3 3 5 3.5 8c.4 2.4 1.5 3.5 2 6 .5 3 1 7 2.5 7s1.5-5 4-5 2.5 5 4 5 2-4 2.5-7c.5-2.5 1.6-3.6 2-6 .5-3-1-5-3.5-5-2 0-3 1-5 1S9 3 7 3z"/></svg>',
+  ruban:'<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 0-3 5.3L14.5 21l2.5-2-4.2-7.4M12 3a3.5 3.5 0 0 1 3 5.3L9.5 21 7 19l4.2-7.4"/></svg>',
+  flacon:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M7.5 15h9"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -1324,7 +1390,7 @@ function alertes(){
 function palierHtml(){
   var p=prochainPalier(), rep=Math.round(reputation());
   if(!p) return '<div class="carte"><div class="carte-haut"><h3>'+PALIERS[S.palier].nom+'<small>Dernier palier atteint. Tous les services sont débloqués.</small></h3></div></div>';
-  return '<div class="carte"><div class="carte-haut"><h3>Prochain palier : '+p.nom+'<small>Débloque '+ORDRE_SERVICES.filter(function(k){return SERVICES[k].palier===S.palier+1;}).map(function(k){return SERVICES[k].nom;}).join(", ")+(S.palier===0?" et les lits":"")+'.</small></h3></div>'
+  return '<div class="carte"><div class="carte-haut"><h3>Prochain palier : '+p.nom+'<small>Débloque '+ORDRE_SERVICES.filter(function(k){return SERVICES[k].palier===S.palier+1;}).map(function(k){return SERVICES[k].nom;}).join(", ")+(S.palier===0?" et les lits":"")+(S.palier+1===RECHERCHE_PALIER?" et le centre de recherche":"")+'.</small></h3></div>'
     +'<div class="progres '+(S.soignes>=p.min?"n2":"nn")+'"><div class="progres-haut"><b>Patients soignés</b><span>'+Math.min(S.soignes,p.min)+" / "+p.min+'</span></div><div class="piste"><div class="plein" style="width:'+borne(S.soignes/p.min*100,0,100)+'%"></div></div></div>'
     +'<div class="progres '+(rep>=p.rep?"n2":"nn")+'"><div class="progres-haut"><b>Réputation</b><span>'+rep+" / "+p.rep+' au moins</span></div><div class="piste"><div class="plein" style="width:'+borne(rep/p.rep*100,0,100)+'%"></div></div></div></div>';
 }
@@ -1372,6 +1438,7 @@ function ecranAccueil(){
     +tuile("g7","services","Services",pl(ORDRE_SERVICES.filter(function(k){return S.ouverts[k];}).length,"ouvert","ouverts"),"services")
     +tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie")
     +tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel")
+    +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
     +tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances")
     +tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal")
@@ -1381,7 +1448,7 @@ function ecranAccueil(){
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
 }
 function ansTxt(p){ return p.age+(p.age>1?" ans":" an"); }
-function nomMal(p){ return MALADIES[p.mal]?MALADIES[p.mal].nom:""; }
+function nomMal(p){ return (MALADIES[p.mal]?MALADIES[p.mal].nom:"")+(p.heli?" · arrivé en hélicoptère":""); }
 function erreurHtml(p){ return (p.aggr?'<span class="puce bad">Aggravé</span>':"")+(p.traitOk===false?'<span class="puce bad">Traitement inadapté</span>':p.diag==="faux"?'<span class="puce warn">Mal diagnostiqué</span>':"")+(p.rupture?'<span class="puce bad">Rupture de stock</span>':""); }
 function ligneDiag(p){
   var c=MALADIES[p.mal].c, t=maintenant(), fin=testsEnCours(p,t), faits=Object.keys(p.tests).length;
@@ -1561,8 +1628,8 @@ function carteService(k){
   else if(!ouvert){ etat='<span class="puce info">À ouvrir</span>'; action='<button type="button" class="btn principal" data-a="ouvrir" data-k="'+k+'"'+(S.caisse>=sv.cout?"":" disabled")+'>Ouvrir · '+mt(sv.cout)+'</button>'+(S.caisse>=sv.cout?"":'<span class="aide">Il manque '+mt(sv.cout-S.caisse)+'.</span>'); }
   else if(!n){ etat='<span class="puce warn">'+(sv.diag?"Sans radiologue":"Sans soignant")+'</span>'; action='<button type="button" class="btn" data-a="recruter" data-k="'+sv.roles[0]+'">Recruter</button>'; }
   else etat='<span class="puce ok">Ouvert</span>';
-  return '<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone '+sv.g+'">'+I[sv.ic]+'</span><h3>'+sv.nom+'<small>'+sv.roles.map(function(r){ return ROLES[r].pluriel; }).join(", ")+' · '+(sv.diag?"radios, échographies et scanners pour vos diagnostics":sv.duree+" min par patient")+'</small></h3></div>'+etat+'</div>'
-    +(verrou?"":'<p class="aide">'+(sv.diag?"Examen facturé "+mt(S.tarifs[k])+" au patient, le double pour un scanner":"Tarif : "+mt(S.tarifs[k]))+(sv.entretien?' · entretien '+mt(sv.entretien)+' par jour':"")+(sv.sejour?' · séjour de '+sv.sejour[0]+' à '+sv.sejour[1]+' jours ensuite':"")+(ouvert&&n?' · '+pl(n,"soignant","soignants"):"")+'</p>')
+  return '<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone '+sv.g+'">'+I[sv.ic]+'</span><h3>'+sv.nom+'<small>'+sv.roles.map(function(r){ return ROLES[r].pluriel; }).join(", ")+' · '+(sv.diag?"radios, échographies, scanners et IRM pour vos diagnostics":sv.duree+" min par patient")+'</small></h3></div>'+etat+'</div>'
+    +(verrou?"":'<p class="aide">'+(sv.diag?"Examen facturé "+mt(S.tarifs[k])+" au patient, le double pour un scanner, le triple pour une IRM":"Tarif : "+mt(S.tarifs[k]))+(sv.entretien?' · entretien '+mt(sv.entretien)+' par jour':"")+(sv.sejour?' · séjour de '+sv.sejour[0]+' à '+sv.sejour[1]+' jours ensuite':"")+(ouvert&&n?' · '+pl(n,"soignant","soignants"):"")+'</p>')
     +(action?'<div class="actions">'+action+'</div>':"")+'</div>';
 }
 function ecranServices(){
@@ -1578,7 +1645,7 @@ function pourcent(x){ return Math.round(x*100)+" %"; }
 function carteTarif(k,nom,ref,pasPrix){
   var prix=S.tarifs[k], poche=dePoche(prix,ref), normal=dePoche(ref,ref), service=k!=="lit"&&k!=="imagerie", d=service?demande(k):1, cible=service?demandeCible(k):1, effet;
   if(k==="lit") effet="Compte dans la fréquentation des services où l'on reste hospitalisé.";
-  else if(k==="imagerie") effet="Facturé à chaque radio ou échographie, le double pour un scanner. Un prix élevé pèse un peu sur la fréquentation de tout l'hôpital.";
+  else if(k==="imagerie") effet="Facturé à chaque radio ou échographie, le double pour un scanner, le triple pour une IRM. Un prix élevé pèse un peu sur la fréquentation de tout l'hôpital.";
   else effet=Math.abs(cible-d)<0.01?(Math.abs(d-1)<0.01?"Vos prix sont dans la norme.":"La fréquentation s'est installée à ce niveau."):cible<d?"Trop cher pour le quartier : la fréquentation va baisser peu à peu.":"Meilleur marché : la fréquentation va monter peu à peu.";
   return '<div class="carte"><div class="reglage"><div><b>'+nom+'</b><br><span class="aide">Prix habituel : '+mt(ref)+'</span></div>'+pas("prix",k,mt(prix),pasPrix,prix>0,prix<ref*5,"le prix")+'</div>'
     +ligne("Remboursé par la mutuelle",mt(partMutuelle(prix,ref)))
@@ -1604,16 +1671,38 @@ function ecranPharmacie(){
     }).join("")+'</ul></div>';
 }
 function ecranMateriel(){
-  return barre()+entete("Matériel","Entretien : "+mt(entretienMateriel())+" par jour")
-    +'<p class="aide">Le matériel s\'achète avec la caisse de l\'hôpital. Chaque niveau coûte le double du précédent et ajoute 1 % de son prix en entretien par jour.</p>'
-    +MATERIEL.map(function(m){
+  function carte(m){
       var n=niv(m[0]), verrou=m[3]>S.palier, prix=n<NIVEAU_MAX?m[2]*COUT_NIVEAU[n]:0, suite;
       if(verrou) suite='<p class="aide">Disponible à partir du palier '+PALIERS[m[3]].nom+'.</p>';
       else if(n>=NIVEAU_MAX) suite='<p class="aide">Niveau maximum atteint.</p>';
       else suite='<div class="actions"><button type="button" class="btn principal" data-a="equiper" data-k="'+m[0]+'"'+(S.caisse>=prix?"":" disabled")+'>'+(n?"Améliorer":"Acheter")+' · '+mt(prix)+'</button>'+(S.caisse>=prix?"":'<span class="aide">Il manque '+mt(prix-S.caisse)+'.</span>')+'</div>';
-      return '<div class="carte"><div class="carte-haut"><h3>'+m[1]+'<small>'+m[4]+'</small></h3><span class="puce '+(n?"ok":"")+'">Niveau '+n+' / '+NIVEAU_MAX+'</span></div>'
+      return '<div class="carte"><div class="carte-haut"><h3>'+m[1]+'<small>'+m[4].replace(/\{(\d+)\}/g,function(x,n){ return mt(+n); })+'</small></h3><span class="puce '+(n?"ok":"")+'">Niveau '+n+' / '+NIVEAU_MAX+'</span></div>'
         +'<div class="piste nn"><div class="plein" style="width:'+(n/NIVEAU_MAX*100)+'%"></div></div>'+suite+'</div>';
-    }).join("");
+  }
+  return barre()+entete("Matériel","Entretien : "+mt(entretienMateriel())+" par jour")
+    +'<p class="aide">Le matériel s\'achète avec la caisse de l\'hôpital. Chaque niveau coûte le double du précédent et ajoute 1 % de son prix en entretien par jour.</p>'
+    +'<div class="bloc"><h2>Équipements</h2>'+MATERIEL.filter(function(m){ return !m[5]; }).map(carte).join("")+'</div>'
+    +'<div class="bloc"><h2>Bâtiment</h2>'+MATERIEL.filter(function(m){ return m[5]==="bat"; }).map(carte).join("")+'</div>';
+}
+function ecranRecherche(){
+  var R=S.recherche, en=R.en, x;
+  if(S.palier<RECHERCHE_PALIER) return barre()+entete("Recherche","Centre de recherche")+'<p class="vide">Le centre de recherche se construit à partir du palier '+PALIERS[RECHERCHE_PALIER].nom+'.</p>';
+  if(!R.ouvert) return barre()+entete("Recherche","Centre de recherche")
+    +'<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone g4">'+I.flacon+'</span><h3>Centre de recherche<small>Vos médecins y mènent des études qui améliorent les soins de tout l\'hôpital.</small></h3></div></div>'
+    +'<p class="aide">Construction : '+mt(RECHERCHE_COUT)+'. Fonctionnement : '+mt(RECHERCHE_ENTRETIEN)+' par jour. Une étude à la fois ; chacune se paie au lancement, dure quelques jours, et son effet est acquis pour toujours.</p>'
+    +'<div class="actions"><button type="button" class="btn principal" data-a="batirlabo"'+(S.caisse>=RECHERCHE_COUT?"":" disabled")+'>Construire · '+mt(RECHERCHE_COUT)+'</button>'+(S.caisse>=RECHERCHE_COUT?"":'<span class="aide">Il manque '+mt(RECHERCHE_COUT-S.caisse)+'.</span>')+'</div></div>';
+  x=en?ETUDES.filter(function(e){ return e[0]===en.k; })[0]:null;
+  return barre()+entete("Recherche","Fonctionnement : "+mt(RECHERCHE_ENTRETIEN)+" par jour · "+pl(Object.keys(R.faits).length,"étude terminée","études terminées"))
+    +(x?'<div class="carte"><div class="carte-haut"><h3>En cours : '+x[1]+'<small>'+x[4]+'</small></h3><span class="puce info num">résultats dans <span data-reste="'+en.fin+'">'+resteTxt(en.fin)+'</span></span></div>'
+      +'<div class="piste nn"><div class="plein" style="width:'+borne((maintenant()-en.debut)/(en.fin-en.debut)*100,0,100)+'%"></div></div><p class="aide">Les résultats sont publiés la nuit qui suit la fin de l\'étude.</p></div>'
+      :'<p class="aide">Aucune étude en cours. Choisissez la prochaine.</p>')
+    +'<div class="bloc"><h2>Études</h2>'+ETUDES.map(function(e){
+      var ok=!!R.faits[e[0]], cours=en&&en.k===e[0], action;
+      if(ok) action='<span class="puce ok">Terminée</span>';
+      else if(cours) action='<span class="puce info">En cours</span>';
+      else action='<button type="button" class="btn principal petit" data-a="etude" data-k="'+e[0]+'"'+(!en&&S.caisse>=e[2]?"":" disabled")+'>Lancer · '+mt(e[2])+'</button>';
+      return '<div class="carte"><div class="carte-haut"><h3>'+e[1]+'<small>'+e[4]+'</small></h3>'+action+'</div>'+(ok||cours?"":'<p class="aide">Durée : '+e[3]+' jours.</p>')+'</div>';
+    }).join("")+'</div>';
 }
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
@@ -1894,7 +1983,22 @@ var A={
     if(n>=NIVEAU_MAX||S.caisse<prix) return false;
     S.materiel[m[0]]=n+1; immobiliser(t,"materiel",m[1]+", niveau "+(n+1),prix);
     noter(t,"ok",m[1]+" : niveau "+(n+1)+" ("+mt(prix)+").");
-    if(m[0]==="ambulance") replanifier(t);
+    if(m[0]==="aile"){ S.lits+=LITS_AILE; noter(t,"ok","La nouvelle aile ouvre avec "+LITS_AILE+" lits de plus."); }
+    if(m[0]==="ambulance"||m[0]==="heliport"||m[0]==="aile") replanifier(t);
+    return true;
+  },
+  batirlabo:function(){
+    var t=maintenant();
+    if(S.palier<RECHERCHE_PALIER||S.recherche.ouvert||S.caisse<RECHERCHE_COUT) return false;
+    S.recherche.ouvert=1; immobiliser(t,"recherche","Centre de recherche",RECHERCHE_COUT);
+    noter(t,"ok","Le centre de recherche est construit ("+mt(RECHERCHE_COUT)+"). Lancez une première étude.");
+    return true;
+  },
+  etude:function(d){
+    var e=ETUDES.filter(function(x){ return x[0]===d.k; })[0], t=maintenant(), R=S.recherche;
+    if(!e||!R.ouvert||R.en||R.faits[e[0]]||S.caisse<e[2]) return false;
+    inscrire(t,"i:recherche",e[2]); R.en={k:e[0],debut:t,fin:t+e[3]*JOUR};
+    noter(t,"","Étude lancée : « "+e[1]+" » ("+mt(e[2])+"). Résultats dans "+e[3]+" jours.");
     return true;
   },
   vue:function(d){ U.vue=d.k; U.decal=0; return false; },
@@ -2015,7 +2119,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
