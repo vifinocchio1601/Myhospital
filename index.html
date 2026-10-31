@@ -147,6 +147,7 @@ h2{font-size:12.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercas
 .rang.moi{border-color:var(--info)}
 svg.graphe text{stroke:none;font-family:var(--f-ui);font-variant-numeric:tabular-nums}
 svg.graphe{width:100%;height:auto}
+.etoiles{color:var(--warn);letter-spacing:1px;white-space:nowrap}
 .carte.crise{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .vide{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:18px;color:var(--muted)}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
@@ -429,6 +430,14 @@ var LITS_AILE=10, FORFAIT_HELICO=800;
 var PRIX_PRIVEE=4000, ENTRETIEN_PRIVEE=25, REF_PRIVEE=900, ENVIE_PRIVEE=0.5, BONUS_PRIVEE=8;
 // Les grandes crises : environ une tous les cinq jours à partir de la Clinique. Le directeur a une heure pour choisir, sinon l'équipe fait au mieux.
 var TAUX_CRISE=0.2, DELAI_CRISE=HEURE, HISTO_MAX=90;
+// Patients qui reviennent : les malades chroniques bien soignés reviennent en contrôle quelques jours plus tard, avec leur dossier
+var CHRONIQUES=["diabete","hypertension","asthme","anemie","migraine","insuffisance","arythmie","angor","depression","anxiete","cancerpoumon","leucemie","cancersein"];
+var TAUX_RETOUR=0.6, DOSSIERS_MAX=300;
+// Rendez-vous : des créneaux ouverts chaque jour (sauf le dimanche), de 8 h à 18 h. Ils se remplissent selon la réputation.
+var RDV_SERVICES=[["consult",20],["dentaire",20],["pediatrie",20],["cardio",12],["psy",12],["chirurgie",6],["onco",4]], ABSENCE_RDV=0.1;
+// École d'internes : des soignants en formation, payés moitié prix, qui progressent deux fois plus vite mais travaillent moins bien sans encadrement
+var ECOLE_COUT=20000, ECOLE_ENTRETIEN=200, ECOLE_PALIER=2, PAIE_INTERNE=0.5, FIN_INTERNAT=30, NB_INTERNES=2;
+var AVIS_PATIENTS_MAX=40, CLE_NOTIF="myhospital-notifications";
 var CRISES={
   epidemie:{nom:"Épidémie de grippe",txt:"Une épidémie de grippe frappe la ville. Une vingtaine de malades vont arriver en consultation dans les heures qui viennent.",
     choix:[["vaccin","Campagne de vaccination gratuite",3000,"Deux fois moins de malades, et la ville vous en est reconnaissante."],["tous","Accueillir tout le monde",0,"Vingt patients de plus : beaucoup de travail et de recettes."],["ailleurs","Les envoyer ailleurs",0,"Aucun patient de plus, mais votre réputation en souffre."]]},
@@ -546,7 +555,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -580,6 +589,10 @@ function migrer(){
   if(S.privees===undefined){
     S.privees=0; S.crise=null; S.panne=0; S.crisesGerees=0; S.serie=0; S.record=0; S.objectifs={}; S.histo=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : grandes crises, objectifs avec primes, chambres privées et courbes d'évolution (tuile Statistiques).");
+  }
+  if(!S.dossiers){
+    S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
   }
   if(S.tarifs&&S.tarifs.privee===undefined) S.tarifs.privee=REF_PRIVEE;
   if(S.bareme!==BAREME){
@@ -668,7 +681,7 @@ function prochaineReleve(t){
 }
 function nomComplet(x){ return x.prenom+" "+x.nom; }
 function nomRole(x){ return x.femme?ROLES[x.role].f:ROLES[x.role].nom; }
-function nomExp(x){ var e=EXP[x.exp]; return x.femme&&e.f?e.f:e.nom; }
+function nomExp(x){ var e=EXP[x.exp]; if(x.interne) return x.femme?"Interne en formation":"Interne en formation"; return x.femme&&e.f?e.f:e.nom; }
 
 /* ------------------------------------------------------------------ Comptes */
 function inscrire(t,poste,montant){
@@ -869,9 +882,11 @@ function planAuto(e){
 function qualite(e){
   var q=remplace(e)?QUALITE_INTERIM:(EXP[e.exp].qualite+0.04*e.na)*(0.85+0.3*moralDe(e)/100);
   if(e.role!=="chef"&&nb("chef")) q+=0.05;
+  if(e.interne) q*=S.equipe.some(function(x){ return x!==e&&x.role===e.role&&!x.interne&&x.exp>=1&&enPoste(x); })?0.92:0.8;
   return q;
 }
 function gagnerXp(e,n,t){
+  if(e.interne){ n*=2; if((e.xp||0)+n>=FIN_INTERNAT){ e.interne=0; noter(t,"ok",nomComplet(e)+" termine son internat : "+(e.femme?"elle":"il")+" devient "+nomRole(e).toLowerCase()+" junior, au salaire normal."); } }
   if(e.exp>=2) return;
   e.xp=(e.xp||0)+n;
   while(e.exp<2&&e.xp>=SEUILS_XP[e.exp+1]){
@@ -881,11 +896,11 @@ function gagnerXp(e,n,t){
 }
 function prixStage(e){ return Math.round(ROLES[e.role].salaire*3/10)*10; }
 function stagePossible(e){ return e.exp<2&&(!e.stage||maintenant()-e.stage>=JOUR); }
-function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie); }
+function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie*(e.interne?PAIE_INTERNE:1)); }
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0)+(S.ecole?ECOLE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 // La mutuelle rembourse une somme fixe : 60 % du prix habituel, jamais plus que le prix demandé.
 // Tout ce qui dépasse est un supplément, payé par le patient. C'est à ce qu'il paie de sa poche qu'il réagit.
 function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
@@ -923,7 +938,10 @@ function creerCandidat(role){
   return c;
 }
 function candidatsDe(role){
-  if(!S.candidats[role]||!S.candidats[role].length){ S.candidats[role]=[]; for(var i=0;i<(forme("recruteur")?5:4);i++) S.candidats[role].push(creerCandidat(role)); }
+  if(!S.candidats[role]||!S.candidats[role].length){
+    S.candidats[role]=[]; for(var i=0;i<(forme("recruteur")?5:4);i++) S.candidats[role].push(creerCandidat(role));
+    if(S.ecole&&ROLES[role].service!=="admin"&&!ROLES[role].unique) for(i=0;i<NB_INTERNES;i++){ var c=creerCandidat(role); c.exp=0; c.interne=1; c.age=entre(24,28); S.candidats[role].push(c); }
+  }
   return S.candidats[role];
 }
 function creerPatient(t,force){
@@ -950,13 +968,28 @@ function creerPatient(t,force){
 }
 /* ------------------------------------------------------------------ Le parcours d'un patient */
 function ranger(p,t,issue){
-  var i=S.patients.indexOf(p); if(i>=0) S.patients.splice(i,1);
+  var i=S.patients.indexOf(p), D, j, l;
+  if(i>=0) S.patients.splice(i,1);
+  if(!S.dossiers) S.dossiers={};
+  // Un malade chronique bien soigné reviendra en contrôle ; son dossier garde la trace de chaque visite
+  if(!p.dossier&&(issue==="soigne"||issue==="sorti")&&CHRONIQUES.indexOf(p.mal)>=0&&p.traitOk!==false&&Math.random()<TAUX_RETOUR){
+    p.dossier=S.nDossier++; S.dossiers[p.dossier]={prenom:p.prenom,nom:p.nom,femme:p.femme,age:p.age,v:[]};
+    l=Object.keys(S.dossiers); if(l.length>DOSSIERS_MAX) delete S.dossiers[l[0]];
+  }
+  D=p.dossier&&S.dossiers[p.dossier];
+  if(D){
+    D.v.push({t:t,mal:p.mal,issue:issue,diag:p.diag==="faux"?0:1});
+    if((issue==="soigne"||issue==="sorti")&&p.traitOk!==false&&CHRONIQUES.indexOf(p.mal)>=0&&Math.random()<TAUX_RETOUR){
+      j=minuit(t+Math.round(alea(3,10))*JOUR)+Math.round(alea(8,18)*HEURE);
+      S.arrivees.push({t:j,mal:p.mal,ev:3,dos:p.dossier}); S.arrivees.sort(function(a,b){ return a.t-b.t; });
+    }
+  }
   S.registre.unshift({t:t,nom:nomComplet(p),motif:MALADIES[p.mal]?MALADIES[p.mal].nom:(p.motif||""),sv:p.sv,tri:p.tri,issue:issue,paye:p.paye,diag:p.traitOk===false?"soin":(p.diag==="faux"?"faux":"")});
   if(S.registre.length>REGISTRE_MAX) S.registre.length=REGISTRE_MAX;
 }
 function accueillir(p,t){
   S.stat.arrives++;
-  p.pat=Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente"))*(p.blanc?2:1))*MIN;
+  p.pat=Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente"))*(p.blanc||p.rdv?2:1))*MIN;
   if(niv("parking")||niv("cafeteria")) inscrire(t,"r:annexes",3*niv("parking")+4*niv("cafeteria"));
   p.etat="diag"; p.limite=t+p.pat; p.auto=t+DELAI_DIAG; p.aggr=0; p.pire=t+Math.round(p.pat*ETAPES_AGGRAVATION[0]);
   S.patients.push(p);
@@ -1063,6 +1096,34 @@ function affecter(t){
   });
   if(pris||file.length) reappro(t);
 }
+function laisserAvis(p,t,note,issue){
+  var neg=[], pos=[], txt, e;
+  if(!S.avisPatients) S.avisPatients=[];
+  if(issue==="parti") neg.push("J'ai attendu des heures et je suis reparti sans être soigné.");
+  if(p.traitOk===false) neg.push("Le traitement ne m'a pas soulagé : on s'est trompé sur ma maladie.");
+  else if(p.diag==="faux") neg.push("Mauvais diagnostic au départ, il a fallu tout recommencer.");
+  if(p.complication) neg.push("Des complications après les soins, j'ai dû rester plus longtemps.");
+  if(p.rupture) neg.push("Le médicament prévu n'était pas disponible.");
+  if(p.attente>SERVICES[p.sv].patience*0.5) neg.push("Beaucoup trop d'attente avant d'être pris en charge.");
+  if(p.garde||p.lent) neg.push("Soigné par un médecin de garde débordé, ça a duré une éternité.");
+  if(couvProprete()<1) neg.push("Les locaux n'étaient pas très propres.");
+  if(couvAccueil()<1) neg.push("Accueil débordé, personne pour nous renseigner.");
+  if(S.tarifs[p.sv]>SERVICES[p.sv].prix*1.3) neg.push("Bien cher, ce qui reste à ma charge après la mutuelle.");
+  if(p.parMoi&&p.diag==="ok") pos.push("Le directeur lui-même a trouvé ce que j'avais, chapeau !");
+  if(p.prive) pos.push("La chambre privée était très confortable.");
+  if(p.rdv) pos.push("Rendez-vous respecté, pas de mauvaise surprise.");
+  if(p.retour) pos.push("Toujours aussi bien suivi ici, je reviens volontiers.");
+  if(p.attente<SERVICES[p.sv].patience*0.15) pos.push("Pris en charge très rapidement.");
+  if(niv("cafeteria")) pos.push("La cafétéria est vraiment agréable.");
+  if(p.blanc) pos.push("Malgré l'accident, tout le monde était mobilisé. Bravo.");
+  pos.push("Équipe aux petits soins, merci.","Personnel compétent et à l'écoute.");
+  if(note<45) txt=neg.length?neg[0]:"Pas satisfait de mon passage.";
+  else if(note<65) txt=neg.length?"Correct dans l'ensemble. "+neg[0]:"Correct, sans plus.";
+  else txt=tirer(pos.slice(0,Math.max(1,pos.length-2)).concat(pos.length>2?[]:pos));
+  e=borne(Math.round(note/20),1,5);
+  S.avisPatients.unshift({t:t,nom:nomComplet(p),sv:p.sv,e:e,txt:txt});
+  if(S.avisPatients.length>AVIS_PATIENTS_MAX) S.avisPatients.length=AVIS_PATIENTS_MAX;
+}
 function satisfaction(p,q){
   var sv=SERVICES[p.sv], n=68+(q-1)*70;
   n-=Math.min(30,p.attente/sv.patience*30);
@@ -1078,6 +1139,7 @@ function satisfaction(p,q){
 function porterPlainte(p,t,chance,min,max,motif){
   if(Math.random()>=chance) return;
   S.plaintes.push({id:S.nPlainte++,t:t,nom:nomComplet(p),motif:motif,montant:Math.round(alea(min,max)/50)*50,limite:jourApres(t,7)});
+  notifier("Plainte contre l'hôpital",nomComplet(p)+" : "+motif+".",t);
   noter(t,"bad","Plainte contre l'hôpital : "+motif+" ("+nomComplet(p)+"). À vous de décider, dans le Journal.");
 }
 function deces(p,t,cause,faute){
@@ -1111,11 +1173,11 @@ function finSoin(p,t){
     if(p.prive||litsLibres()>0){ p.etat="lit"; p.entree=t; p.sortie=t+p.sejour*JOUR; p.note=Math.max(0,note); affecter(t); monterPalier(t); return; }
     note-=15; S.stat.sansLit=(S.stat.sansLit||0)+1;
   }
-  avis(Math.max(0,note)); ranger(p,t,"soigne");
+  avis(Math.max(0,note)); laisserAvis(p,t,Math.max(0,note),"soigne"); ranger(p,t,"soigne");
   affecter(t); monterPalier(t); verifierObjectifs(t);
 }
 function sortir(p,t){
-  avis(p.note-(1-couvLits())*20);
+  avis(p.note-(1-couvLits())*20); laisserAvis(p,t,p.note-(1-couvLits())*20,"sorti");
   ranger(p,t,"sorti");
 }
 function partir(p,t){
@@ -1123,7 +1185,7 @@ function partir(p,t){
   if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<(fait("thrombolyse")?0.25:0.5)){ deces(p,t,"faute de prise en charge à temps",true); return; }
   S.stat.partis++;
   if(p.etat==="diag") S.stat.sansDiag++; else S.stat.sansSoin[p.sv]=(S.stat.sansSoin[p.sv]||0)+1;
-  avis(10); ranger(p,t,"parti");
+  avis(10); if(Math.random()<0.5) laisserAvis(p,t,10,"parti"); ranger(p,t,"parti");
 }
 // Une plainte restée sans décision part au tribunal
 function partHopital(m){ return Math.round(m*FRANCHISE); }
@@ -1168,6 +1230,22 @@ function replanifier(t){
   if(new Date(t).getHours()<6) planifierJour(minuit(t-12*HEURE),t,true);
   planifierJour(minuit(t),t);
 }
+function planifierRdv(debut,apres,seul){
+  var j=jourSemaine(debut+12*HEURE), venue=Math.min(1,0.4+reputation()/100)*(1-ABSENCE_RDV), n=0;
+  if(j===6||!S.rdv) return;
+  RDV_SERVICES.forEach(function(x){
+    var sv=x[0], k=S.rdv[sv]||0, l, i, t;
+    if(!k||(seul&&seul!==sv)||SERVICES[sv].palier>S.palier||!S.ouverts[sv]) return;
+    l=Object.keys(MALADIES).filter(function(m){ return MALADIES[m].sv===sv&&MALADIES[m].tri!=="rouge"&&MALADIES[m].tri!=="orange"&&poidsSaison(m,debut+12*HEURE)>0; });
+    if(!l.length) l=Object.keys(MALADIES).filter(function(m){ return MALADIES[m].sv===sv; });
+    for(i=0;i<k;i++){
+      t=debut+Math.round((8+(i+0.5)*10/k)*HEURE);
+      if(t>apres&&Math.random()<venue){ S.arrivees.push({t:t,mal:tirerMaladie(l,t),ev:4,rdv:1}); n++; }
+    }
+  });
+  S.prevus=(S.prevus||0)+n;
+  S.arrivees.sort(function(a,b){ return a.t-b.t; });
+}
 function planifierEvenement(debut){
   if(S.palier>=1&&Math.random()<TAUX_CRISE){ S.evts.push({t:debut+Math.round(alea(9,18)*HEURE),crise:1}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
   if(Math.random()<TAUX_EVENEMENT){ S.evts.push({t:debut+Math.round(alea(8,20)*HEURE)}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
@@ -1178,6 +1256,7 @@ function verifierObjectifs(t){
     if(S.objectifs[o[0]]||o[5]()<o[3]) return;
     S.objectifs[o[0]]=t; inscrire(t,"r:divers",o[4]);
     noter(t,"ok","Objectif atteint : « "+o[1]+" ». Prime de "+mt(o[4])+" versée à l'hôpital.");
+    notifier("Objectif atteint","« "+o[1]+" » : prime de "+mt(o[4])+".",t);
   });
 }
 function monterPalier(t){
@@ -1221,6 +1300,7 @@ function lancerCrise(t){
   if(!S.ouverts.urgences) l.splice(1,1);
   S.crise={k:tirer(l),t:t,limite:t+DELAI_CRISE};
   noter(t,"bad","Crise : "+CRISES[S.crise.k].nom.toLowerCase()+". Vous avez une heure pour décider, depuis l'accueil.");
+  notifier("Crise : "+CRISES[S.crise.k].nom,"Vous avez une heure pour décider. Ouvrez l'accueil de l'hôpital.",t);
 }
 // Le choix du directeur, ou celui de l'équipe (le choix gratuit du milieu) quand l'heure est passée
 function resoudreCrise(t,ch){
@@ -1299,6 +1379,7 @@ function cloturer(t){
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE);
   inscrire(tj,"e:materiel",entretienMateriel());
+  if(S.ecole) inscrire(tj,"e:direction",ECOLE_ENTRETIEN);
   if(S.recherche&&S.recherche.ouvert){
     inscrire(tj,"e:recherche",RECHERCHE_ENTRETIEN);
     if(S.recherche.en&&S.recherche.en.fin<=t){
@@ -1329,7 +1410,7 @@ function cloturer(t){
   monterPalier(t); verifierObjectifs(t);
   absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
-  if(S.portes){ planifierJour(t,t); planifierEvenement(t); }
+  if(S.portes){ planifierJour(t,t); planifierRdv(t,t); planifierEvenement(t); }
   affecter(t); reappro(t);
 }
 // Le temps réel : on rejoue dans l'ordre tout ce qui devait arriver jusqu'à l'instant donné
@@ -1356,7 +1437,11 @@ function avancer(jusqua){
     if(t<S.horloge) t=S.horloge;
     change=true; S.horloge=t;
     if(quoi==="cloture"){ cloturer(t); S.prochaineCloture=prochainMinuit(t+1000); }
-    else if(quoi==="arrivee"){ a=S.arrivees.shift(); p=creerPatient(t,a.mal||null); if(a.ev===2) p.blanc=1; accueillir(p,t); }
+    else if(quoi==="arrivee"){
+      a=S.arrivees.shift(); p=creerPatient(t,a.mal||null); if(a.ev===2) p.blanc=1; if(a.rdv) p.rdv=1;
+      if(a.dos&&S.dossiers[a.dos]){ qui=S.dossiers[a.dos]; p.prenom=qui.prenom; p.nom=qui.nom; p.femme=qui.femme; p.age=qui.age; p.dossier=a.dos; p.retour=1; qui=null; }
+      accueillir(p,t);
+    }
     else if(quoi==="evenement"){ a=S.evts.shift(); if(a.crise) lancerCrise(t); else declencher(t); }
     else if(quoi==="crise") resoudreCrise(t,null);
     else if(quoi==="livraison"){ a=S.commandes.shift(); S.stock[a.p]=stockDe(a.p)+a.n; S.valStock[a.p]=(S.valStock[a.p]||0)+(a.v===undefined?PRODUITS[a.p].cout*a.n:a.v); }
@@ -1412,6 +1497,7 @@ var I={
   cerveau:'<svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-5.5 1.5A3 3 0 0 0 4 11a3 3 0 0 0 1.5 4.5A3 3 0 0 0 9 19.5a3 3 0 0 0 3-1.5zM12 5a3 3 0 0 1 5.5 1.5A3 3 0 0 1 20 11a3 3 0 0 1-1.5 4.5A3 3 0 0 1 15 19.5a3 3 0 0 1-3-1.5z"/></svg>',
   dent:'<svg viewBox="0 0 24 24"><path d="M7 3C4.5 3 3 5 3.5 8c.4 2.4 1.5 3.5 2 6 .5 3 1 7 2.5 7s1.5-5 4-5 2.5 5 4 5 2-4 2.5-7c.5-2.5 1.6-3.6 2-6 .5-3-1-5-3.5-5-2 0-3 1-5 1S9 3 7 3z"/></svg>',
   ruban:'<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 0-3 5.3L14.5 21l2.5-2-4.2-7.4M12 3a3.5 3.5 0 0 1 3 5.3L9.5 21 7 19l4.2-7.4"/></svg>',
+  etoile:'<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
   coupe:'<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4"/></svg>',
   flacon:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M7.5 15h9"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
@@ -1527,6 +1613,8 @@ function ecranAccueil(){
     +tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie")
     +tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel")
     +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
+    +tuile("g3","calendrier","Agenda",pl(S.arrivees.filter(function(a){ return a.rdv&&a.t>maintenant(); }).length,"rendez-vous","rendez-vous")+" à venir","agenda")
+    +tuile("g5","etoile","Avis",(S.avisPatients||[]).length?((S.avisPatients.reduce(function(n,a){ return n+a.e; },0)/S.avisPatients.length).toFixed(1).replace(".",",")+" / 5"):"Aucun avis","avispat")
     +tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs")
     +tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats")
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
@@ -1550,7 +1638,7 @@ function nomMal(p){ return (MALADIES[p.mal]?MALADIES[p.mal].nom:"")+(p.heli?" ·
 function erreurHtml(p){ return (p.aggr?'<span class="puce bad">Aggravé</span>':"")+(p.traitOk===false?'<span class="puce bad">Traitement inadapté</span>':p.diag==="faux"?'<span class="puce warn">Mal diagnostiqué</span>':"")+(p.rupture?'<span class="puce bad">Rupture de stock</span>':""); }
 function ligneDiag(p){
   var c=MALADIES[p.mal].c, t=maintenant(), fin=testsEnCours(p,t), faits=Object.keys(p.tests).length;
-  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>'+(c?c+' · ':"")+p.symptomes.map(function(x){ return SYMPTOMES[x]; }).join(", ")+'</small><span class="dossier">Dossier n° '+("00000"+p.id).slice(-6)+'</span></div>'
+  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>'+(c?c+' · ':"")+p.symptomes.map(function(x){ return SYMPTOMES[x]; }).join(", ")+'</small><span class="dossier">Dossier n° '+("00000"+(p.dossier||p.id)).slice(-6)+(p.retour?" · déjà suivi":"")+(p.rdv?" · rendez-vous":"")+'</span></div>'
     +'<div class="droite">'+triHtml(p.tri)+(p.aggr?'<span class="puce bad">Aggravé</span>':"")
     +(fin?'<span class="puce info num">analyse en cours · <span data-reste="'+fin+'">'+resteTxt(fin)+'</span></span>':faits?'<span class="puce ok">Résultats prêts</span>':"")
     +'<span class="puce warn num">repart dans <span data-reste="'+p.limite+'">'+resteTxt(p.limite)+'</span></span><button type="button" class="btn principal petit" data-a="dossier" data-k="'+p.id+'">Diagnostiquer</button></div></li>';
@@ -1606,6 +1694,13 @@ function candidatHtml(p,k){
       }).join("")+'</div>'
       +'<button type="button" class="btn principal" data-a="poser"'+(U.trait?"":" disabled")+'>Poser le diagnostic et prescrire</button></div>':"")+'</li>';
 }
+function dossierHtml(p){
+  var D=p.dossier&&S.dossiers&&S.dossiers[p.dossier];
+  if(!D||!D.v.length) return "";
+  return '<div class="carte"><h2>Dossier médical · '+pl(D.v.length,"visite","visites")+'</h2><ul class="liste">'+D.v.slice(-5).reverse().map(function(v){
+    return '<li class="rang"><div><b>'+(MALADIES[v.mal]?MALADIES[v.mal].nom:"")+'</b><small>'+dateCourte(v.t)+(v.diag?"":" · le diagnostic était faux")+'</small></div><div class="droite"><span class="puce '+ISSUES[v.issue][1]+'">'+ISSUES[v.issue][0]+'</span></div></li>';
+  }).join("")+'</ul><p class="aide">Un malade chronique revient souvent pour la même maladie, mais pas toujours.</p></div>';
+}
 function ecranDossier(){
   var p=parId(S.patients,U.dossier), m, n=maintenant();
   if(!p||p.etat!=="diag"){ U.ecran="patients"; U.dossier=null; U.choix=null; if(!U.retour) U.retour={c:"",m:"Ce patient n'attend plus de diagnostic."}; return ecranPatients(); }
@@ -1614,6 +1709,7 @@ function ecranDossier(){
     +'<div class="badges">'+triHtml(p.tri)+'<span class="puce warn num">repart dans <span data-reste="'+p.limite+'">'+resteTxt(p.limite)+'</span></span>'
     +(p.pire>n?'<span class="puce bad num">s\'aggrave dans <span data-reste="'+p.pire+'">'+resteTxt(p.pire)+'</span></span>':"")
     +(qualiteRelais(p)&&p.auto>n?'<span class="puce num">relais de l\'équipe dans <span data-reste="'+p.auto+'">'+resteTxt(p.auto)+'</span></span>':"")+'</div>'
+    +dossierHtml(p)
     +'<div class="carte"><h2>Ce que dit le patient</h2><div class="signes">'+(m.c?'<span class="signe ctx">'+m.c+'</span>':"")+p.symptomes.map(function(x){ return '<span class="signe">'+SYMPTOMES[x]+'</span>'; }).join("")+'</div></div>'
     +'<div class="carte"><h2>Tests</h2><div class="liste">'+ORDRE_TESTS.map(function(k){ return testHtml(p,k); }).join("")+'</div><p class="aide">Chaque test prend du temps. Tant qu\'un résultat est attendu, le patient reste. Un test sans rapport avec la maladie l\'agace. Les résultats anormaux sont en couleur.</p></div>'
     +'<div class="carte"><h2>Diagnostics possibles</h2><p class="aide">Touchez une maladie pour voir ce que ses tests devraient montrer. Les signes entourés sont ceux du patient.</p><ul class="liste">'+differentiel(p).map(function(c){ return candidatHtml(p,c.k); }).join("")+'</ul></div>';
@@ -1674,11 +1770,19 @@ function carteRole(r){
         +'<button type="button" class="btn petit danger" data-a="licencier" data-k="'+e.id+'"'+(e.occupe?" disabled":"")+'>'+(c?"Confirmer":"Licencier")+'</button></div></li>';
     }).join("")+'</ul></div>';
 }
+function ecoleHtml(){
+  var n=S.equipe.filter(function(e){ return e.interne; }).length;
+  if(S.palier<ECOLE_PALIER) return "";
+  return '<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone g6">'+I.coupe+'</span><h3>École d\'internes<small>'+(S.ecole?pl(n,"interne","internes")+" dans l'équipe":"Former vos propres soignants")+'</small></h3></div>'+(S.ecole?'<span class="puce ok">Ouverte</span>':"")+'</div>'
+    +'<p class="aide">'+(S.ecole?"Dans Recrutement, chaque métier soignant propose aussi deux internes : payés moitié prix, ils progressent deux fois plus vite. Sans un collègue confirmé ou senior en poste à côté d'eux, ils travaillent nettement moins bien. Après une trentaine de patients, ils deviennent juniors au salaire normal.":"Les internes coûtent moitié prix et progressent deux fois plus vite, mais ils doivent être encadrés.")+' Fonctionnement : '+mt(ECOLE_ENTRETIEN)+' par jour.</p>'
+    +(S.ecole?"":'<div class="actions"><button type="button" class="btn principal" data-a="ecole"'+(S.caisse>=ECOLE_COUT?"":" disabled")+'>Ouvrir l\'école · '+mt(ECOLE_COUT)+'</button></div>')+'</div>';
+}
 function ecranEquipe(){
   var cartes=ORDRE_ROLES.map(carteRole).join("");
   return barre()+entete("Équipe",pl(S.equipe.length,"personne","personnes")+" · "+mt(masseJour(maintenant())*(1+TAUX_COTISATIONS))+" de salaires et cotisations aujourd'hui")
     +'<ul class="liste"><li class="rang moi"><div><b>'+h(S.prenom)+'</b> (vous)<small>Directeur de l\'hôpital · '+mt(PAIE_DIRECTEUR)+' toutes les 20 minutes de jeu</small></div><div class="droite"><button type="button" class="btn petit" data-a="aller" data-e="moi">Ma fiche</button></div></li></ul>'
     +'<div class="actions"><button type="button" class="btn" data-a="aller" data-e="planning">'+I.calendrier+'Planning</button><button type="button" class="btn principal" data-a="aller" data-e="recrutement">'+I.recrut+'Recruter</button></div>'
+    +ecoleHtml()
     +(cartes||'<p class="vide">Personne ne travaille encore ici.</p>');
 }
 function ecranPlanning(){
@@ -1713,7 +1817,7 @@ function ecranRecrutement(){
     +'<div class="puces-choix">'+roles.map(function(x){ return '<button type="button" class="choix'+(x===r?" actif":"")+'" data-a="role" data-k="'+x+'">'+ROLES[x].nom+(nb(x)?" · "+nb(x):"")+'</button>'; }).join("")+'</div>'
     +'<p class="aide">'+(r==="chef"?"Le médecin-chef consulte comme un généraliste et améliore le travail de toute l'équipe. Un seul par hôpital.":r==="secretaire"?"Sans accueil, les patients repartent moins satisfaits.":r==="agent"?"Des locaux propres comptent pour la réputation, et pour les inspections.":r==="infirmier"?"Les infirmiers font les soins et veillent sur les patients alités.":r==="radiologue"?"Sans radiologue, ni radio, ni échographie, ni scanner pour vos diagnostics."+(S.ouverts.imagerie?"":" Le service Imagerie n'est pas encore ouvert."):"Travaille au service "+SERVICES[R.service].nom+(S.ouverts[R.service]?".":" (pas encore ouvert)."))+' Salaire fixé pour ce métier : '+mt(S.postes[r].salaire)+' par poste de 8 h.</p>'
     +'<ul class="liste">'+liste.map(function(c){
-      return '<li class="rang"><div><b>'+h(nomComplet(c))+'</b>, '+c.age+' ans<small>'+nomExp(c)+' · '+mt(Math.round(S.postes[r].salaire*EXP[c.exp].paie))+' par poste</small>'
+      return '<li class="rang"><div><b>'+h(nomComplet(c))+'</b>, '+c.age+' ans<small>'+nomExp(c)+' · '+mt(Math.round(S.postes[r].salaire*EXP[c.exp].paie*(c.interne?PAIE_INTERNE:1)))+' par poste</small>'
         +'<div class="badges" style="margin-top:6px">'+c.atouts.map(function(a){ return '<span class="puce'+(R.atouts.indexOf(a)>=0?" ok":"")+'">'+ATOUTS[a]+'</span>'; }).join("")+'</div></div>'
         +'<div class="droite"><button type="button" class="btn principal" data-a="engager" data-k="'+c.id+'">Engager</button></div></li>';
     }).join("")+'</ul>'
@@ -1844,6 +1948,29 @@ function ecranStats(){
     +courbe("res","Résultat de la journée",l,function(x){ return x.x; },signeM)
     +courbe("rep","Réputation",l,function(x){ return x.r; },function(v){ return v+" / 100"; })
     +courbe("soin","Patients soignés",l,function(x){ return x.s; },function(v){ return pl(v,"patient","patients"); });
+}
+function ecranAgenda(){
+  var t=maintenant(), aVenir=S.arrivees.filter(function(a){ return a.rdv&&a.t>t; }), ouverts=RDV_SERVICES.filter(function(x){ return SERVICES[x[0]].palier<=S.palier; });
+  return barre()+entete("Agenda","Rendez-vous de 8 h à 18 h, du lundi au samedi")
+    +'<p class="aide">Ouvrez des créneaux de rendez-vous par service, en plus des patients qui viennent sans prévenir. Plus votre réputation est bonne, plus ils se remplissent ; environ un patient sur dix ne vient pas. Un patient sur rendez-vous attend plus volontiers et repart plus satisfait. Les créneaux s\'appliquent dès aujourd\'hui.</p>'
+    +'<div class="carte"><h2>Créneaux par jour</h2>'+ouverts.map(function(x){
+      var sv=x[0], k=S.rdv[sv]||0, ouvert=S.ouverts[sv];
+      return '<div class="reglage"><div><b>'+SERVICES[sv].nom+'</b><br><span class="aide">'+(ouvert?"Jusqu'à "+x[1]+" par jour":"Service fermé")+'</span></div>'+pas("rdv",sv,pl(k,"créneau","créneaux"),1,k>0,ouvert&&k<x[1],"les créneaux")+'</div>';
+    }).join("")+'</div>'
+    +'<div class="bloc"><h2>Prochains rendez-vous · '+aVenir.length+'</h2>'+(aVenir.length?'<ul class="liste">'+aVenir.slice(0,40).map(function(a){
+      var sv=MALADIES[a.mal].sv;
+      return '<li class="rang"><div><b>'+heureTxt(a.t)+'</b><small>'+SERVICES[sv].nom+'</small></div><div class="droite"><span class="puce">'+(cleJour(a.t)===cleJour(t)?"Aujourd'hui":dateCourte(a.t))+'</span></div></li>';
+    }).join("")+'</ul>':'<p class="vide">Aucun rendez-vous à venir aujourd\'hui. Les créneaux de demain se remplissent à minuit.</p>')+'</div>';
+}
+function etoiles(n){ var s="", i; for(i=1;i<=5;i++) s+=i<=n?"★":"☆"; return '<span class="etoiles" aria-label="'+n+' sur 5">'+s+'</span>'; }
+function ecranAvis(){
+  var l=S.avisPatients||[], par={}, moy;
+  l.forEach(function(a){ if(!par[a.sv]) par[a.sv]=[0,0]; par[a.sv][0]+=a.e; par[a.sv][1]++; });
+  moy=l.length?l.reduce(function(n,a){ return n+a.e; },0)/l.length:0;
+  return barre()+entete("Avis des patients",l.length?"Note moyenne "+moy.toFixed(1).replace(".",",")+" / 5 sur les "+pl(l.length,"dernier avis","derniers avis"):"Aucun avis pour l'instant")
+    +(l.length?'<div class="carte"><h2>Par service</h2><ul class="liste">'+ORDRE_SERVICES.filter(function(k){ return par[k]; }).map(function(k){ var m=par[k][0]/par[k][1]; return '<li class="rang"><div><b>'+SERVICES[k].nom+'</b><small>'+pl(par[k][1],"avis","avis")+'</small></div><div class="droite">'+etoiles(Math.round(m))+'<span class="puce num">'+m.toFixed(1).replace(".",",")+'</span></div></li>'; }).join("")+'</ul></div>'
+      +'<div class="bloc"><h2>Derniers avis</h2><ul class="liste">'+l.slice(0,20).map(function(a){ return '<li class="rang"><div><b>'+h(a.nom)+'</b> '+etoiles(a.e)+'<small>« '+h(a.txt)+' »</small><small>'+SERVICES[a.sv].nom+' · '+quandTxt(a.t)+'</small></div></li>'; }).join("")+'</ul></div>'
+      :'<p class="vide">Les patients laissent un avis en repartant.</p>');
 }
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
@@ -1984,6 +2111,7 @@ function ecranReglages(){
   var etat=nuage.ref?"Votre partie est enregistrée sur votre compte : vous la retrouvez sur votre téléphone comme sur votre ordinateur.":"Votre partie est enregistrée sur cet appareil.";
   return barre()+entete("Aide et réglages","")
     +'<div class="carte"><h2>Sauvegarde</h2><p>'+etat+'</p></div>'
+    +'<div class="carte"><h2>Notifications</h2><p class="aide">Une alerte sur le téléphone quand une crise commence, quand un objectif est atteint ou quand un patient porte plainte. Elles marchent dans l\'appli installée sur l\'écran d\'accueil, tant qu\'elle est ouverte ou en arrière-plan : quand l\'appli est complètement fermée, l\'iPhone ne la laisse pas prévenir.</p><div class="actions">'+(!("Notification" in window)?'<span class="aide">Pas disponible dans cette version : ouvrez l\'appli installée sur votre téléphone.</span>':Notification.permission==="denied"?'<span class="aide">Refusées sur cet appareil : autorisez-les dans les réglages du téléphone (Notifications, MyHospital).</span>':'<button type="button" class="btn'+(lireNotif()?"":" principal")+'" data-a="notif">'+(lireNotif()?"Désactiver":"Activer les notifications")+'</button>'+(lireNotif()?'<span class="puce ok">Activées</span>':""))+'</div></div>'
     +'<div class="carte"><h2>Les règles en bref</h2>'
     +'<p class="aide"><b>Temps réel.</b> Une consultation dure 20 vraies minutes, une opération 1 h 30. L\'hôpital continue de tourner quand le jeu est fermé.</p>'
     +'<p class="aide"><b>Diagnostic.</b> Chaque patient arrive avec quelques symptômes. Vous faites des tests, puis vous désignez la maladie. Une erreur allonge les soins et mécontente le patient. Sans réponse au bout de 15 minutes, un médecin prend le relais.</p>'
@@ -2053,8 +2181,8 @@ var A={
     var r=roleCourant(), c=parId(S.candidats[r]||[],+d.k), t=maintenant();
     if(!c||(ROLES[r].unique&&nb(r))) return false;
     S.candidats[r].splice(S.candidats[r].indexOf(c),1);
-    c={id:S.nEquipe++,prenom:c.prenom,nom:c.nom,femme:c.femme,age:c.age,role:r,exp:c.exp,atouts:c.atouts,na:c.na,depuis:t,occupe:null,minutes:0,soignes:0};
-    c.xp=SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c);
+    c={id:S.nEquipe++,prenom:c.prenom,nom:c.nom,femme:c.femme,age:c.age,role:r,exp:c.exp,interne:c.interne?1:0,atouts:c.atouts,na:c.na,depuis:t,occupe:null,minutes:0,soignes:0};
+    c.xp=c.interne?0:SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c);
     noter(t,"",nomComplet(c)+" rejoint l'équipe comme "+(c.femme?ROLES[r].f:ROLES[r].nom).toLowerCase()+".");
     if(!S.portes&&ROLES[r].service!=="admin"){ S.portes=true; noter(t,"ok","Le cabinet ouvre ses portes : les premiers patients peuvent venir."); }
     replanifier(t);
@@ -2146,6 +2274,28 @@ var A={
     inscrire(t,"i:recherche",e[2]); R.en={k:e[0],debut:t,fin:t+e[3]*JOUR};
     noter(t,"","Étude lancée : « "+e[1]+" » ("+mt(e[2])+"). Résultats dans "+e[3]+" jours.");
     return true;
+  },
+  rdv:function(d){
+    var x=RDV_SERVICES.filter(function(r){ return r[0]===d.k; })[0], t=maintenant();
+    if(!x) return false;
+    S.rdv[d.k]=borne((S.rdv[d.k]||0)+(+d.d),0,x[1]);
+    S.arrivees=S.arrivees.filter(function(a){ return !(a.rdv&&a.t>t&&MALADIES[a.mal].sv===d.k); });
+    if(S.portes) planifierRdv(minuit(t),t,d.k);
+    return true;
+  },
+  ecole:function(){
+    var t=maintenant();
+    if(S.ecole||S.palier<ECOLE_PALIER||S.caisse<ECOLE_COUT) return false;
+    S.ecole=1; immobiliser(t,"direction","École d'internes",ECOLE_COUT); S.candidats={};
+    noter(t,"ok","L'école d'internes ouvre ("+mt(ECOLE_COUT)+"). Des internes sont proposés dans Recrutement.");
+    return true;
+  },
+  notif:function(){
+    var pref=lireNotif();
+    if(pref){ try{ localStorage.removeItem(CLE_NOTIF); }catch(e){} return false; }
+    if(!("Notification" in window)) return false;
+    try{ Notification.requestPermission().then(function(r){ if(r==="granted"){ try{ localStorage.setItem(CLE_NOTIF,"1"); }catch(e){} notifier("MyHospital","Les notifications sont activées.",Date.now()); } rendre(); }); }catch(e){}
+    return false;
   },
   vue:function(d){ U.vue=d.k; U.decal=0; return false; },
   finpage:function(d){ U.finPage=d.k; return false; },
@@ -2265,7 +2415,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
@@ -2304,6 +2454,15 @@ document.addEventListener("click",function(ev){
   rendre();
   if(change) pousser(false);
 });
+function lireNotif(){ try{ return localStorage.getItem(CLE_NOTIF)==="1"; }catch(e){ return false; } }
+// Une notification n'a de sens que pour ce qui se passe maintenant, pas pour le rattrapage d'une absence
+function notifier(titre,corps,t){
+  if(!lireNotif()||!("Notification" in window)||Notification.permission!=="granted"||Math.abs(Date.now()-t)>5*MIN) return;
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(function(r){ r.showNotification(titre,{body:corps,icon:"icons/icon-192.png",tag:"myhospital"}); });
+    else new Notification(titre,{body:corps,icon:"icons/icon-192.png"});
+  }catch(e){}
+}
 function lireCourbe(ev){
   var g=ev.target.closest?ev.target.closest("svg.graphe"):null, r, x, l, i, n, el;
   if(!g) return;
