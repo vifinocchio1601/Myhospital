@@ -145,6 +145,9 @@ h2{font-size:12.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercas
 .rang small{display:block;color:var(--muted);font-size:13px}
 .rang .droite{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .rang.moi{border-color:var(--info)}
+svg.graphe text{stroke:none;font-family:var(--f-ui);font-variant-numeric:tabular-nums}
+svg.graphe{width:100%;height:auto}
+.carte.crise{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .vide{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:18px;color:var(--muted)}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
 .reglage{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
@@ -422,6 +425,17 @@ var MATERIEL=[
   ["parking","Parking payant",4000,0,"Chaque niveau : chaque patient qui arrive paie {3} de parking.","bat"],
   ["cafeteria","Cafétéria",3000,0,"Chaque niveau : chaque patient qui arrive y dépense {4}, et repart un peu plus satisfait.","bat"]];
 var LITS_AILE=10, FORFAIT_HELICO=800;
+// Chambres privées : plus chères la nuit, plus appréciées, mais un patient en chambre privée compte pour deux lits auprès des infirmiers
+var PRIX_PRIVEE=4000, ENTRETIEN_PRIVEE=25, REF_PRIVEE=900, ENVIE_PRIVEE=0.5, BONUS_PRIVEE=8;
+// Les grandes crises : environ une tous les cinq jours à partir de la Clinique. Le directeur a une heure pour choisir, sinon l'équipe fait au mieux.
+var TAUX_CRISE=0.2, DELAI_CRISE=HEURE, HISTO_MAX=90;
+var CRISES={
+  epidemie:{nom:"Épidémie de grippe",txt:"Une épidémie de grippe frappe la ville. Une vingtaine de malades vont arriver en consultation dans les heures qui viennent.",
+    choix:[["vaccin","Campagne de vaccination gratuite",3000,"Deux fois moins de malades, et la ville vous en est reconnaissante."],["tous","Accueillir tout le monde",0,"Vingt patients de plus : beaucoup de travail et de recettes."],["ailleurs","Les envoyer ailleurs",0,"Aucun patient de plus, mais votre réputation en souffre."]]},
+  accident:{nom:"Accident de car",txt:"Un car s'est renversé sur l'autoroute. Une douzaine de blessés arrivent dans l'heure.",
+    choix:[["blanc","Déclencher le plan blanc",2500,"Tout le personnel est mobilisé : les blessés acceptent d'attendre deux fois plus longtemps, et la presse salue l'hôpital."],["tous","Faire au mieux",0,"Douze blessés de plus avec l'équipe en place."],["ailleurs","En envoyer la moitié ailleurs",0,"Six blessés seulement, mais votre réputation en souffre."]]},
+  panne:{nom:"Panne de courant",txt:"Une panne de courant touche le quartier. Sans électricité, ni laboratoire ni imagerie pendant six heures.",
+    choix:[["groupe","Louer un groupe électrogène",2000,"Tout continue de fonctionner normalement."],["attendre","Attendre la réparation",0,"Pas de tests de laboratoire ni d'imagerie pendant six heures."]]}};
 // Le centre de recherche : une étude à la fois, payée au lancement ; une fois terminée, son effet est acquis pour toujours
 var RECHERCHE_COUT=30000, RECHERCHE_ENTRETIEN=300, RECHERCHE_PALIER=3;
 var ETUDES=[
@@ -504,6 +518,24 @@ var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","J
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
 var NOMS=["Marchetti","Roche","El Amrani","Vasseur","Lemoine","Bertin","Okafor","Delcourt","Petit","Fontaine","Keller","Novak","Maréchal","Aubry","Vanel","Brunel","Castan","Dufresne","Esteban","Ferrand","Garnier","Haddad","Imbert","Jouvet","Kowalski","Lacombe","Morel","Nguyen","Ostrowski","Perrin","Quentin","Ribeiro","Sorel","Tessier","Urbain","Vidal","Weiss","Yildiz","Zamora","Bellamy"];
 
+// Objectifs : chaque objectif atteint rapporte une prime, versée une seule fois dans la caisse de l'hôpital
+var OBJECTIFS=[
+  ["soin50","Premiers pas","Soigner 50 patients",50,1000,function(){ return S.soignes; }],
+  ["soin1000","Hôpital de confiance","Soigner 1 000 patients",1000,10000,function(){ return S.soignes; }],
+  ["soin5000","Institution","Soigner 5 000 patients",5000,30000,function(){ return S.soignes; }],
+  ["serie100","Zéro décès","Soigner 100 patients d'affilée sans aucun décès",100,3000,function(){ return S.serie||0; }],
+  ["diag50","Œil du directeur","Poser vous-même 50 bons diagnostics",50,2000,function(){ return S.diag.ok; }],
+  ["diag300","Grand diagnosticien","Poser vous-même 300 bons diagnostics",300,8000,function(){ return S.diag.ok; }],
+  ["rep80","Excellente réputation","Atteindre 80 de réputation",80,5000,function(){ return Math.round(reputation()); }],
+  ["equipe30","Grande équipe","Avoir 30 personnes dans l'équipe",30,4000,function(){ return S.equipe.length; }],
+  ["seniors10","Équipe chevronnée","Avoir 10 seniors dans l'équipe",10,5000,function(){ return S.equipe.filter(function(e){ return e.exp>=2; }).length; }],
+  ["services","Tout sous un même toit","Ouvrir tous les services",ORDRE_SERVICES.length,15000,function(){ return ORDRE_SERVICES.filter(function(k){ return S.ouverts[k]; }).length; }],
+  ["prive10","Grand confort","Avoir 10 chambres privées",10,4000,function(){ return S.privees||0; }],
+  ["jour10k","Journée record","Gagner 10 000 en une journée",10000,5000,function(){ return Math.max(0,S.record||0); }],
+  ["crises3","Sang-froid","Gérer 3 grandes crises",3,5000,function(){ return S.crisesGerees||0; }],
+  ["recherche","Prix Nobel","Terminer toutes les études de recherche",ETUDES.length,20000,function(){ return Object.keys((S.recherche&&S.recherche.faits)||{}).length; }],
+  ["palier","Centre de référence","Atteindre le dernier palier",PALIERS.length-1,10000,function(){ return S.palier; }]];
+
 /* ------------------------------------------------------------------ État */
 function moiVide(){ return {argent:0,gagne:0,actif:0,tranche:0,formations:{},place:0,taux:4.5,gainsPlace:0,pret:0,interets:0,gainsPret:0,dons:0,biens:{}}; }
 function statVide(){ return {arrives:0,soignes:0,partis:0,transferes:0,renonces:0,sansDiag:0,manque:{},sansSoin:{},ruptures:{}}; }
@@ -514,7 +546,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -545,6 +577,11 @@ function migrer(){
     S.recherche={ouvert:0,en:null,faits:{}};
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : Dentisterie, Cardiologie, Psychiatrie et Oncologie, l'IRM et l'héliport, l'agrandissement du bâtiment, un 5e palier et le centre de recherche.");
   }
+  if(S.privees===undefined){
+    S.privees=0; S.crise=null; S.panne=0; S.crisesGerees=0; S.serie=0; S.record=0; S.objectifs={}; S.histo=[];
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : grandes crises, objectifs avec primes, chambres privées et courbes d'évolution (tuile Statistiques).");
+  }
+  if(S.tarifs&&S.tarifs.privee===undefined) S.tarifs.privee=REF_PRIVEE;
   if(S.bareme!==BAREME){
     Object.keys(ANCIENS_PRIX).forEach(function(k){ var neuf=k==="lit"?REF_LIT:SERVICES[k].prix; if(S.tarifs[k]!==undefined) S.tarifs[k]=Math.round(S.tarifs[k]/ANCIENS_PRIX[k]*neuf/10)*10; });
     Object.keys(ANCIENS_SALAIRES).forEach(function(k){ if(S.postes[k]) S.postes[k].salaire=Math.round(S.postes[k].salaire/ANCIENS_SALAIRES[k]*ROLES[k].salaire/5)*5; });
@@ -774,10 +811,12 @@ function optionsTraitement(p,k){
 function enAttente(){ return S.patients.filter(function(p){ return p.etat==="attente"; }); }
 function enSoin(){ return S.patients.filter(function(p){ return p.etat==="soin"; }); }
 function alites(){ return S.patients.filter(function(p){ return p.etat==="lit"; }); }
-function litsLibres(){ return S.lits-alites().length; }
+function litsLibres(){ return S.lits-alites().filter(function(p){ return !p.prive; }).length; }
+function priveesLibres(){ return (S.privees||0)-alites().filter(function(p){ return p.prive; }).length; }
+function placesLits(){ return S.lits+(S.privees||0); }
 function couvAccueil(){ return Math.min(1,auTravail("secretaire")*PAR_SECRETAIRE*(1+0.25*niv("informatique"))/Math.max(1,S.prevus||1)); }
 function couvProprete(){ return Math.min(1,auTravail("agent")*PAR_AGENT*(1+0.25*niv("entretien"))/Math.max(1,(S.prevus||0)+S.lits)); }
-function couvLits(){ var o=alites().length; return o?Math.min(1,auTravail("infirmier")*LITS_PAR_INFIRMIER/o):1; }
+function couvLits(){ var o=alites().length+alites().filter(function(p){ return p.prive; }).length; return o?Math.min(1,auTravail("infirmier")*LITS_PAR_INFIRMIER/o):1; }
 // Le moral d'un métier dépend du salaire horaire comparé à l'habitude, et de la longueur des journées
 function absentLe(e,t){ return !!(e.absent&&t>=e.absent.debut&&t<e.absent.fin); }
 // Vrai quand c'est un intérimaire qui tient le poste de la personne
@@ -846,7 +885,7 @@ function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie);
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 // La mutuelle rembourse une somme fixe : 60 % du prix habituel, jamais plus que le prix demandé.
 // Tout ce qui dépasse est un supplément, payé par le patient. C'est à ce qu'il paie de sa poche qu'il réagit.
 function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
@@ -917,7 +956,7 @@ function ranger(p,t,issue){
 }
 function accueillir(p,t){
   S.stat.arrives++;
-  p.pat=Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente")))*MIN;
+  p.pat=Math.round(SERVICES[p.sv].patience*(1+0.15*niv("attente"))*(p.blanc?2:1))*MIN;
   if(niv("parking")||niv("cafeteria")) inscrire(t,"r:annexes",3*niv("parking")+4*niv("cafeteria"));
   p.etat="diag"; p.limite=t+p.pat; p.auto=t+DELAI_DIAG; p.aggr=0; p.pire=t+Math.round(p.pat*ETAPES_AGGRAVATION[0]);
   S.patients.push(p);
@@ -933,6 +972,7 @@ function aggraver(p,t){
 // Un test est possible si l'hôpital a ce qu'il faut. Renvoie la raison du refus, ou une chaîne vide.
 function testDispo(k){
   var T=TESTS[k];
+  if((T.labo||T.imagerie)&&S.panne&&S.panne>maintenant()) return "Panne de courant";
   if(T.besoin&&!nb(T.besoin)) return "Il faut un infirmier";
   if(T.besoin&&!S.equipe.some(function(e){ return e.role===T.besoin&&enPoste(e); })) return "Aucun infirmier en poste";
   if(T.service){ if(SERVICES[T.service].palier>S.palier) return "Palier "+PALIERS[SERVICES[T.service].palier].nom; if(!S.ouverts[T.service]) return "Service "+SERVICES[T.service].nom+" fermé"; }
@@ -1041,6 +1081,7 @@ function porterPlainte(p,t,chance,min,max,motif){
   noter(t,"bad","Plainte contre l'hôpital : "+motif+" ("+nomComplet(p)+"). À vous de décider, dans le Journal.");
 }
 function deces(p,t,cause,faute){
+  S.serie=0;
   var e=parId(S.equipe,p.soignant);
   if(e&&e.occupe===p.id) e.occupe=null;
   S.stat.deces=(S.stat.deces||0)+1; S.medical.deces++;
@@ -1061,16 +1102,17 @@ function finSoin(p,t){
     porterPlainte(p,t,faute?0.25:0.03,500,1500,"complication après les soins");
   }
   facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
-  p.paye+=prix; S.soignes++; S.stat.soignes++;
+  p.paye+=prix; S.soignes++; S.stat.soignes++; S.serie=(S.serie||0)+1;
   if(p.heli){ facturer(t,"r:"+p.sv,FORFAIT_HELICO,FORFAIT_HELICO); p.paye+=FORFAIT_HELICO; }
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
   if(p.sejour){
-    if(litsLibres()>0){ p.etat="lit"; p.entree=t; p.sortie=t+p.sejour*JOUR; p.note=Math.max(0,note); affecter(t); monterPalier(t); return; }
+    if(priveesLibres()>0&&(litsLibres()<=0||Math.random()<ENVIE_PRIVEE)){ p.prive=1; note+=BONUS_PRIVEE; }
+    if(p.prive||litsLibres()>0){ p.etat="lit"; p.entree=t; p.sortie=t+p.sejour*JOUR; p.note=Math.max(0,note); affecter(t); monterPalier(t); return; }
     note-=15; S.stat.sansLit=(S.stat.sansLit||0)+1;
   }
   avis(Math.max(0,note)); ranger(p,t,"soigne");
-  affecter(t); monterPalier(t);
+  affecter(t); monterPalier(t); verifierObjectifs(t);
 }
 function sortir(p,t){
   avis(p.note-(1-couvLits())*20);
@@ -1127,7 +1169,16 @@ function replanifier(t){
   planifierJour(minuit(t),t);
 }
 function planifierEvenement(debut){
+  if(S.palier>=1&&Math.random()<TAUX_CRISE){ S.evts.push({t:debut+Math.round(alea(9,18)*HEURE),crise:1}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
   if(Math.random()<TAUX_EVENEMENT){ S.evts.push({t:debut+Math.round(alea(8,20)*HEURE)}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
+}
+function verifierObjectifs(t){
+  if(!S.objectifs) S.objectifs={};
+  OBJECTIFS.forEach(function(o){
+    if(S.objectifs[o[0]]||o[5]()<o[3]) return;
+    S.objectifs[o[0]]=t; inscrire(t,"r:divers",o[4]);
+    noter(t,"ok","Objectif atteint : « "+o[1]+" ». Prime de "+mt(o[4])+" versée à l'hôpital.");
+  });
 }
 function monterPalier(t){
   var p=prochainPalier();
@@ -1163,6 +1214,38 @@ function declencher(t){
     inscrire(t,"e:imagerie",250); noter(t,"warn","Panne de l'appareil de radiologie : la réparation coûte "+mt(250)+".");
   }
   S.arrivees.sort(function(a,b){ return a.t-b.t; });
+}
+function lancerCrise(t){
+  var l=["epidemie","accident","panne"];
+  if(S.crise||!enPosteMaintenant()) return;
+  if(!S.ouverts.urgences) l.splice(1,1);
+  S.crise={k:tirer(l),t:t,limite:t+DELAI_CRISE};
+  noter(t,"bad","Crise : "+CRISES[S.crise.k].nom.toLowerCase()+". Vous avez une heure pour décider, depuis l'accueil.");
+}
+// Le choix du directeur, ou celui de l'équipe (le choix gratuit du milieu) quand l'heure est passée
+function resoudreCrise(t,ch){
+  var C=S.crise, X, c, i, n, mal, l;
+  if(!C) return false;
+  X=CRISES[C.k]; c=X.choix.filter(function(x){ return x[0]===ch; })[0];
+  if(!c) c=ch?null:(C.k==="panne"?X.choix[1]:X.choix[1]);
+  if(!c) return false;
+  if(c[2]>S.caisse&&ch) return false;
+  S.crise=null; S.crisesGerees=(S.crisesGerees||0)+1;
+  if(c[2]) inscrire(t,"x:divers",c[2]);
+  if(C.k==="epidemie"){
+    n=c[0]==="vaccin"?10:c[0]==="tous"?20:0;
+    for(i=0;i<n;i++) S.arrivees.push({t:t+Math.round(alea(5,360)*MIN),mal:tirer(["grippe","grippe","bronchite","angine"]),ev:1});
+  } else if(C.k==="accident"){
+    n=c[0]==="ailleurs"?6:12; l=["fracture","commotion","plaie","entorse","fracture"];
+    if(S.ouverts.chirurgie) l.push("femur");
+    for(i=0;i<n;i++) S.arrivees.push({t:t+Math.round(alea(2,60)*MIN),mal:tirer(l),ev:c[0]==="blanc"?2:1});
+  } else if(c[0]==="attendre") S.panne=t+6*HEURE;
+  if(c[0]==="vaccin"||c[0]==="blanc"){ avis(92); avis(92); avis(92); }
+  if(c[0]==="ailleurs"){ avis(25); avis(25); avis(25); }
+  S.arrivees.sort(function(a,b){ return a.t-b.t; });
+  noter(t,c[0]==="ailleurs"?"warn":"ok",X.nom+" : "+(ch?"vous choisissez":"sans réponse de votre part, l'équipe choisit")+" « "+c[1].toLowerCase()+" »"+(c[2]?" ("+mt(c[2])+")":"")+".");
+  affecter(t); verifierObjectifs(t);
+  return true;
 }
 // À minuit : paie, charges, journées d'hospitalisation, démissions, puis préparation de la journée suivante
 // Chaque nuit : le portefeuille d'actions rapporte entre 2 % et 7 % par an (le taux bouge un peu chaque jour),
@@ -1214,7 +1297,7 @@ function cloturer(t){
   });
   inscrire(tj,"e:batiment",chargesBatiment());
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
-  inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT);
+  inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE);
   inscrire(tj,"e:materiel",entretienMateriel());
   if(S.recherche&&S.recherche.ouvert){
     inscrire(tj,"e:recherche",RECHERCHE_ENTRETIEN);
@@ -1225,7 +1308,7 @@ function cloturer(t){
     }
   }
   if(S.portes) inscrire(tj,"e:plaintes",PRIME_ASSURANCE[S.palier]);
-  S.patients.forEach(function(p){ if(p.etat==="lit"){ facturer(tj,"r:lits",S.tarifs.lit,REF_LIT); p.paye+=S.tarifs.lit; } });
+  S.patients.forEach(function(p){ if(p.etat==="lit"){ if(p.prive){ facturer(tj,"r:lits",S.tarifs.privee,REF_PRIVEE); p.paye+=S.tarifs.privee; } else { facturer(tj,"r:lits",S.tarifs.lit,REF_LIT); p.paye+=S.tarifs.lit; } } });
   amortir(tj);
   if(S.caisse<0) inscrire(tj,"x:divers",Math.max(1,-S.caisse*TAUX_DECOUVERT));
   financesPerso(tj);
@@ -1238,11 +1321,12 @@ function cloturer(t){
   });
   c=S.cj[cleJour(tj)]||{}; res=recettesDe(c)-depensesDe(c);
   if(S.portes) noter(tj,res>=0?"ok":"warn","Jour "+S.jour+" : "+pl(S.stat.soignes,"patient soigné","patients soignés")+(S.stat.partis?", "+pl(S.stat.partis,"reparti","repartis")+" sans soins":"")+(S.stat.transferes?", "+pl(S.stat.transferes,"envoyé","envoyés")+" ailleurs":"")+". Résultat de la journée : "+signeM(res)+".");
+  if(S.portes){ S.record=Math.max(S.record||0,res); if(!S.histo) S.histo=[]; S.histo.push({d:tj,c:Math.round(S.caisse),r:Math.round(reputation()),s:S.stat.soignes,x:Math.round(res)}); if(S.histo.length>HISTO_MAX) S.histo.shift(); }
   S.stat=statVide(); S.jour++;
   S.equipe.forEach(function(e){ e.minutes=0; });
   garde=cleJour(t-JOURS_GARDES*JOUR);
   for(vieux in S.cj) if(vieux<garde) delete S.cj[vieux];
-  monterPalier(t);
+  monterPalier(t); verifierObjectifs(t);
   absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
   if(S.portes){ planifierJour(t,t); planifierEvenement(t); }
@@ -1258,6 +1342,7 @@ function avancer(jusqua){
     if(S.evts.length&&S.evts[0].t<t){ t=S.evts[0].t; quoi="evenement"; }
     if(S.commandes.length&&S.commandes[0].t<t){ t=S.commandes[0].t; quoi="livraison"; }
     if(S.releve&&S.releve<t){ t=S.releve; quoi="releve"; }
+    if(S.crise&&S.crise.limite<t){ t=S.crise.limite; quoi="crise"; }
     for(i=0;i<S.patients.length;i++){
       p=S.patients[i];
       if(p.etat==="diag"){ if(p.auto&&p.auto<=p.limite&&qualiteRelais(p)>0){ e=p.auto; q="relais"; } else { e=p.limite; q="depart"; } a=testsEnCours(p,S.horloge); if(a&&a<e){ e=a; q="resultat"; } }
@@ -1271,8 +1356,9 @@ function avancer(jusqua){
     if(t<S.horloge) t=S.horloge;
     change=true; S.horloge=t;
     if(quoi==="cloture"){ cloturer(t); S.prochaineCloture=prochainMinuit(t+1000); }
-    else if(quoi==="arrivee"){ a=S.arrivees.shift(); accueillir(creerPatient(t,a.mal||null),t); }
-    else if(quoi==="evenement"){ S.evts.shift(); declencher(t); }
+    else if(quoi==="arrivee"){ a=S.arrivees.shift(); p=creerPatient(t,a.mal||null); if(a.ev===2) p.blanc=1; accueillir(p,t); }
+    else if(quoi==="evenement"){ a=S.evts.shift(); if(a.crise) lancerCrise(t); else declencher(t); }
+    else if(quoi==="crise") resoudreCrise(t,null);
     else if(quoi==="livraison"){ a=S.commandes.shift(); S.stock[a.p]=stockDe(a.p)+a.n; S.valStock[a.p]=(S.valStock[a.p]||0)+(a.v===undefined?PRODUITS[a.p].cout*a.n:a.v); }
     else if(quoi==="releve"){ S.releve=prochaineReleve(t+1000); affecter(t); }
     else if(quoi==="aggrave"){ aggraver(qui,t); affecter(t); }
@@ -1326,6 +1412,7 @@ var I={
   cerveau:'<svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-5.5 1.5A3 3 0 0 0 4 11a3 3 0 0 0 1.5 4.5A3 3 0 0 0 9 19.5a3 3 0 0 0 3-1.5zM12 5a3 3 0 0 1 5.5 1.5A3 3 0 0 1 20 11a3 3 0 0 1-1.5 4.5A3 3 0 0 1 15 19.5a3 3 0 0 1-3-1.5z"/></svg>',
   dent:'<svg viewBox="0 0 24 24"><path d="M7 3C4.5 3 3 5 3.5 8c.4 2.4 1.5 3.5 2 6 .5 3 1 7 2.5 7s1.5-5 4-5 2.5 5 4 5 2-4 2.5-7c.5-2.5 1.6-3.6 2-6 .5-3-1-5-3.5-5-2 0-3 1-5 1S9 3 7 3z"/></svg>',
   ruban:'<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 0-3 5.3L14.5 21l2.5-2-4.2-7.4M12 3a3.5 3.5 0 0 1 3 5.3L9.5 21 7 19l4.2-7.4"/></svg>',
+  coupe:'<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4"/></svg>',
   flacon:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M7.5 15h9"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
 };
@@ -1422,12 +1509,13 @@ function ecranAccueil(){
     +jauge("Caisse",mt(S.caisse),S.caisse<0?"n0":"",null,"Aujourd'hui "+signeM(jr))
     +jauge("Réputation",rep+" / 100",rep>=65?"n2":rep<40?"n0":"",rep,libReputation(rep))
     +jauge("Patients du jour",pl(S.stat.soignes,"soigné","soignés"),"",null,nd+" à diagnostiquer · "+pl(S.stat.partis,"reparti","repartis"))
-    +(S.palier>=1?jauge("Lits",occ+" / "+S.lits,S.lits&&occ>=S.lits?"n0":"nn",S.lits?occ/S.lits*100:0,S.lits?pl(S.lits-occ,"libre","libres"):"Aucun lit acheté")
+    +(S.palier>=1?jauge("Lits",occ+" / "+placesLits(),placesLits()&&occ>=placesLits()?"n0":"nn",placesLits()?occ/placesLits()*100:0,placesLits()?pl(placesLits()-occ,"libre","libres"):"Aucun lit acheté")
       :jauge("Équipe",pl(S.equipe.length,"personne","personnes"),"",null,pl(enPosteMaintenant(),"soignant en poste","soignants en poste")))
     +'</div>'
     +'<div class="bloc"><button type="button" class="btn principal large" data-a="patient"'+(S.portes?"":" disabled")+'>'+I.plus+'Faire entrer un patient</button>'
     +'<p class="aide">'+(S.portes?(pro?"Prochain patient attendu "+(cleJour(pro)===cleJour(maintenant())?"vers ":"demain vers ")+heureTxt(pro)+".":"Plus de patient prévu aujourd'hui."):"Le cabinet n'a pas encore ouvert ses portes.")+'</p></div>'
     +bloc
+    +criseHtml()
     +(al?'<div class="alertes">'+al+'</div>':"")
     +'<div class="tuiles">'
     +tuile("g1","patients","Patients",nd+" à diagnostiquer · "+(att+enSoin().length)+" en soins","patients")
@@ -1439,6 +1527,8 @@ function ecranAccueil(){
     +tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie")
     +tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel")
     +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
+    +tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs")
+    +tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats")
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
     +tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances")
     +tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal")
@@ -1446,6 +1536,14 @@ function ecranAccueil(){
     +'</div>'
     +palierHtml()
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
+}
+function criseHtml(){
+  var C=S.crise, X;
+  if(!C) return S.panne&&S.panne>maintenant()?'<div class="alertes"><div class="alerte bad"><span>Panne de courant : ni laboratoire ni imagerie encore <span data-reste="'+S.panne+'">'+resteTxt(S.panne)+'</span>.</span></div></div>':"";
+  X=CRISES[C.k];
+  return '<div class="carte crise"><div class="carte-haut"><h3>'+X.nom+'<small>'+X.txt+'</small></h3><span class="puce bad num">décision dans <span data-reste="'+C.limite+'">'+resteTxt(C.limite)+'</span></span></div>'
+    +'<ul class="liste">'+X.choix.map(function(c){ return '<li class="rang"><div><b>'+c[1]+'</b><small>'+c[3]+'</small></div><div class="droite"><button type="button" class="btn principal petit" data-a="crise" data-k="'+c[0]+'"'+(c[2]>S.caisse?" disabled":"")+'>'+(c[2]?mt(c[2]):"Choisir")+'</button></div></li>'; }).join("")+'</ul>'
+    +'<p class="aide">Sans décision, l\'équipe choisit « '+X.choix[1][1].toLowerCase()+' ».</p></div>';
 }
 function ansTxt(p){ return p.age+(p.age>1?" ans":" an"); }
 function nomMal(p){ return (MALADIES[p.mal]?MALADIES[p.mal].nom:"")+(p.heli?" · arrivé en hélicoptère":""); }
@@ -1468,7 +1566,7 @@ function ligneSoin(p){
     +'<div class="droite">'+triHtml(p.tri)+erreurHtml(p)+'<span class="puce num">encore <span data-reste="'+p.fin+'">'+resteTxt(p.fin)+'</span></span></div></li>';
 }
 function ligneLit(p){
-  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>Hospitalisé · '+nomMal(p)+'</small></div>'
+  return '<li class="rang"><div><b>'+h(nomComplet(p))+'</b>, '+ansTxt(p)+'<small>'+(p.prive?"Chambre privée":"Hospitalisé")+' · '+nomMal(p)+'</small></div>'
     +'<div class="droite"><span class="puce num">sortie '+dateCourte(p.sortie)+' · '+heureTxt(p.sortie)+'</span></div></li>';
 }
 function ecranPatients(){
@@ -1639,12 +1737,16 @@ function ecranServices(){
     +ORDRE_SERVICES.map(carteService).join("")
     +'<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone g8">'+I.lit+'</span><h3>Lits d\'hospitalisation<small>'+(S.palier>=1?occ+" occupés sur "+S.lits:"Disponibles à partir du palier Clinique")+'</small></h3></div>'+(S.palier>=1?'<span class="puce '+(S.lits?"ok":"info")+'">'+pl(S.lits,"lit","lits")+'</span>':'<span class="puce">Palier Clinique</span>')+'</div>'
     +(S.palier>=1?'<p class="aide">Chaque patient alité paie '+mt(S.tarifs.lit)+' par nuit. Un lit coûte '+mt(ENTRETIEN_LIT)+' d\'entretien par jour. Il faut un infirmier pour '+LITS_PAR_INFIRMIER+' lits occupés.</p>'
-      +'<div class="actions"><button type="button" class="btn principal" data-a="lit"'+(S.caisse>=PRIX_LIT?"":" disabled")+'>Acheter un lit · '+mt(PRIX_LIT)+'</button></div>':"")+'</div>';
+      +'<div class="actions"><button type="button" class="btn principal" data-a="lit"'+(S.caisse>=PRIX_LIT?"":" disabled")+'>Acheter un lit · '+mt(PRIX_LIT)+'</button></div>':"")+'</div>'
+    +(S.palier>=1?'<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone g5">'+I.lit+'</span><h3>Chambres privées<small>'+alites().filter(function(p){ return p.prive; }).length+' occupées sur '+(S.privees||0)+'</small></h3></div><span class="puce '+(S.privees?"ok":"info")+'">'+pl(S.privees||0,"chambre","chambres")+'</span></div>'
+      +'<p class="aide">La nuit coûte '+mt(S.tarifs.privee)+' au lieu de '+mt(S.tarifs.lit)+'. Un patient sur deux la choisit quand elle est libre, et en repart plus satisfait. Elle demande deux fois plus de temps aux infirmiers. Entretien : '+mt(ENTRETIEN_PRIVEE)+' par jour.</p>'
+      +'<div class="actions"><button type="button" class="btn principal" data-a="privee"'+(S.caisse>=PRIX_PRIVEE?"":" disabled")+'>Aménager une chambre · '+mt(PRIX_PRIVEE)+'</button></div></div>':"");
 }
 function pourcent(x){ return Math.round(x*100)+" %"; }
 function carteTarif(k,nom,ref,pasPrix){
-  var prix=S.tarifs[k], poche=dePoche(prix,ref), normal=dePoche(ref,ref), service=k!=="lit"&&k!=="imagerie", d=service?demande(k):1, cible=service?demandeCible(k):1, effet;
-  if(k==="lit") effet="Compte dans la fréquentation des services où l'on reste hospitalisé.";
+  var prix=S.tarifs[k], poche=dePoche(prix,ref), normal=dePoche(ref,ref), service=k!=="lit"&&k!=="privee"&&k!=="imagerie", d=service?demande(k):1, cible=service?demandeCible(k):1, effet;
+  if(k==="privee") effet="Les patients choisissent la chambre privée une fois sur deux quand elle est libre, quel que soit son prix.";
+  else if(k==="lit") effet="Compte dans la fréquentation des services où l'on reste hospitalisé.";
   else if(k==="imagerie") effet="Facturé à chaque radio ou échographie, le double pour un scanner, le triple pour une IRM. Un prix élevé pèse un peu sur la fréquentation de tout l'hôpital.";
   else effet=Math.abs(cible-d)<0.01?(Math.abs(d-1)<0.01?"Vos prix sont dans la norme.":"La fréquentation s'est installée à ce niveau."):cible<d?"Trop cher pour le quartier : la fréquentation va baisser peu à peu.":"Meilleur marché : la fréquentation va monter peu à peu.";
   return '<div class="carte"><div class="reglage"><div><b>'+nom+'</b><br><span class="aide">Prix habituel : '+mt(ref)+'</span></div>'+pas("prix",k,mt(prix),pasPrix,prix>0,prix<ref*5,"le prix")+'</div>'
@@ -1704,11 +1806,50 @@ function ecranRecherche(){
       return '<div class="carte"><div class="carte-haut"><h3>'+e[1]+'<small>'+e[4]+'</small></h3>'+action+'</div>'+(ok||cours?"":'<p class="aide">Durée : '+e[3]+' jours.</p>')+'</div>';
     }).join("")+'</div>';
 }
+function ecranObjectifs(){
+  var n=OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length;
+  return barre()+entete("Objectifs",n+" sur "+OBJECTIFS.length+" atteints")
+    +'<p class="aide">Chaque objectif atteint verse une prime dans la caisse de l\'hôpital, une seule fois.</p>'
+    +'<ul class="liste">'+OBJECTIFS.map(function(o){
+      var ok=S.objectifs&&S.objectifs[o[0]], v=Math.min(o[5](),o[3]);
+      return '<li class="rang"><div><b>'+o[1]+'</b><small>'+o[2]+'</small>'
+        +(ok?"":'<div class="progres nn" style="margin-top:6px"><div class="piste"><div class="plein" style="width:'+borne(v/o[3]*100,0,100)+'%"></div></div><small>'+(o[0]==="jour10k"?mt(v)+" / "+mt(o[3]):nombre(v)+" / "+nombre(o[3]))+'</small></div>')+'</div>'
+        +'<div class="droite">'+(ok?'<span class="puce ok">Atteint · '+mt(o[4])+'</span>':'<span class="puce">Prime '+mt(o[4])+'</span>')+'</div></li>';
+    }).join("")+'</ul>';
+}
+// Une courbe par mesure, sur le même axe des jours ; un toucher sur la courbe affiche la valeur du jour
+function courbe(id,titre,l,f,fmt){
+  var W=320, H=120, g=34, d=6, n=l.length, vals=l.map(f), mn=Math.min.apply(null,vals.concat([0])), mx=Math.max.apply(null,vals.concat([1])), pts, X, Y, dern=vals[n-1];
+  if(mx===mn) mx=mn+1;
+  X=function(i){ return g+(n>1?i/(n-1):0.5)*(W-g-d); }; Y=function(v){ return 8+(1-(v-mn)/(mx-mn))*(H-26); };
+  pts=vals.map(function(v,i){ return X(i).toFixed(1)+","+Y(v).toFixed(1); }).join(" ");
+  return '<div class="carte"><div class="carte-haut"><h3>'+titre+'<small id="lu-'+id+'">'+dateCourte(l[n-1].d)+' : '+fmt(dern)+'</small></h3></div>'
+    +'<svg class="graphe" data-id="'+id+'" data-n="'+n+'" data-g="'+g+'" data-w="'+W+'" data-d="'+d+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+titre+'" style="width:100%;height:auto;display:block;touch-action:pan-y">'
+    +'<line x1="'+g+'" x2="'+(W-d)+'" y1="'+Y(mn).toFixed(1)+'" y2="'+Y(mn).toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>'
+    +(mn<0?'<line x1="'+g+'" x2="'+(W-d)+'" y1="'+Y(0).toFixed(1)+'" y2="'+Y(0).toFixed(1)+'" stroke="var(--faint)" stroke-width="1" stroke-dasharray="3 3"/>':"")
+    +'<text x="'+(g-4)+'" y="'+(Y(mx)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="var(--faint)">'+court(mx)+'</text>'
+    +'<text x="'+(g-4)+'" y="'+(Y(mn)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="var(--faint)">'+court(mn)+'</text>'
+    +'<text x="'+g+'" y="'+(H-2)+'" font-size="9" fill="var(--faint)">'+dateCourte(l[0].d)+'</text><text x="'+(W-d)+'" y="'+(H-2)+'" text-anchor="end" font-size="9" fill="var(--faint)">'+dateCourte(l[n-1].d)+'</text>'
+    +'<polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    +'<line class="viseur" x1="0" x2="0" y1="6" y2="'+(H-18)+'" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>'
+    +'<circle class="point" r="4" cx="'+X(n-1).toFixed(1)+'" cy="'+Y(dern).toFixed(1)+'" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>'
+    +'</svg><script type="application/json" id="data-'+id+'">'+JSON.stringify(l.map(function(x,i){ return [dateCourte(x.d),fmt(vals[i]),X(i),Y(vals[i])]; })).replace(/</g,"\\u003c")+'<\/script></div>';
+}
+function court(v){ var a=Math.abs(v); return (v<0?"−":"")+(a>=1e6?(a/1e6).toFixed(1).replace(".",",")+" M":a>=1e4?Math.round(a/1e3)+" k":nombre(Math.round(a))); }
+function ecranStats(){
+  var l=S.histo||[];
+  if(l.length<2) return barre()+entete("Statistiques","Évolution jour après jour")+'<p class="vide">Les courbes se remplissent chaque nuit à minuit. Revenez dans '+(l.length?"un jour":"deux jours")+' pour voir les premières.</p>';
+  return barre()+entete("Statistiques","Les "+l.length+" derniers jours · touchez une courbe pour lire un jour")
+    +courbe("caisse","Caisse à minuit",l,function(x){ return x.c; },mt)
+    +courbe("res","Résultat de la journée",l,function(x){ return x.x; },signeM)
+    +courbe("rep","Réputation",l,function(x){ return x.r; },function(v){ return v+" / 100"; })
+    +courbe("soin","Patients soignés",l,function(x){ return x.s; },function(v){ return pl(v,"patient","patients"); });
+}
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
     +'<p class="aide">Aucun patient ne refuse votre prix. La mutuelle rembourse une somme fixe, 60 % du prix habituel ; le reste est payé par le patient. Mais un service cher se fait une réputation : il y vient peu à peu moins de monde. Un service bon marché en attire davantage.</p>'
     +debloques().map(function(k){ return carteTarif(k,SERVICES[k].acte+(S.ouverts[k]?"":" (service fermé)"),SERVICES[k].prix,SERVICES[k].pas); }).join("")
-    +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,10):"");
+    +(S.palier>=1?carteTarif("lit","Nuit d'hospitalisation",REF_LIT,10)+carteTarif("privee","Nuit en chambre privée",REF_PRIVEE,25):"");
 }
 function periode(vue,decal){
   var d=new Date(maintenant()), cles=[], i, q, titre, src="cm";
@@ -1964,7 +2105,7 @@ var A={
     if(!e||!(j>=0&&j<7)) return false;
     e.plan[j]=deJour(e)?(e.plan[j]==="R"?"M":"R"):(CYCLE_POSTES[e.plan[j]]||"M"); replanifier(t); affecter(t); return true;
   },
-  prix:function(d){ var ref=d.k==="lit"?REF_LIT:SERVICES[d.k].prix; S.tarifs[d.k]=borne(S.tarifs[d.k]+(+d.d),0,ref*5); return true; },
+  prix:function(d){ var ref=d.k==="lit"?REF_LIT:d.k==="privee"?REF_PRIVEE:SERVICES[d.k].prix; S.tarifs[d.k]=borne(S.tarifs[d.k]+(+d.d),0,ref*5); return true; },
   ouvrir:function(d){
     var sv=SERVICES[d.k], t=maintenant();
     if(!sv||S.ouverts[d.k]||sv.palier>S.palier||S.caisse<sv.cout) return false;
@@ -1976,6 +2117,11 @@ var A={
     if(S.palier<1||S.caisse<PRIX_LIT) return false;
     S.lits++; immobiliser(maintenant(),"lits","Lit d'hospitalisation",PRIX_LIT); return true;
   },
+  privee:function(){
+    if(S.palier<1||S.caisse<PRIX_PRIVEE) return false;
+    S.privees=(S.privees||0)+1; immobiliser(maintenant(),"lits","Chambre privée",PRIX_PRIVEE); verifierObjectifs(maintenant()); return true;
+  },
+  crise:function(d){ return S.crise?resoudreCrise(S.crise.limite>maintenant()?maintenant():S.crise.limite,d.k):false; },
   equiper:function(d){
     var m=MATERIEL.filter(function(x){ return x[0]===d.k; })[0], t=maintenant(), n, prix;
     if(!m||m[3]>S.palier) return false;
@@ -2119,7 +2265,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
@@ -2158,6 +2304,18 @@ document.addEventListener("click",function(ev){
   rendre();
   if(change) pousser(false);
 });
+function lireCourbe(ev){
+  var g=ev.target.closest?ev.target.closest("svg.graphe"):null, r, x, l, i, n, el;
+  if(!g) return;
+  try{ l=JSON.parse(document.getElementById("data-"+g.dataset.id).textContent); }catch(e){ return; }
+  r=g.getBoundingClientRect(); n=l.length; x=(ev.clientX-r.left)/r.width*(+g.dataset.w);
+  i=Math.round((x-(+g.dataset.g))/((+g.dataset.w)-(+g.dataset.g)-(+g.dataset.d))*(n-1)); i=borne(i,0,n-1);
+  el=g.querySelector(".viseur"); el.setAttribute("x1",l[i][2]); el.setAttribute("x2",l[i][2]); el.setAttribute("visibility","visible");
+  el=g.querySelector(".point"); el.setAttribute("cx",l[i][2]); el.setAttribute("cy",l[i][3]);
+  el=document.getElementById("lu-"+g.dataset.id); if(el) el.textContent=l[i][0]+" : "+l[i][1];
+}
+document.addEventListener("pointermove",lireCourbe);
+document.addEventListener("pointerdown",lireCourbe);
 document.addEventListener("input",function(ev){
   if(ev.target.id==="f-nom") U.fond.nom=ev.target.value;
   if(ev.target.id==="f-prenom") U.fond.prenom=ev.target.value;
