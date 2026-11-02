@@ -2149,7 +2149,9 @@ function barre(){
     +'<span class="puce num">'+I.horloge+'<span id="horloge">'+horlogeTxt(maintenant())+'</span></span></header>';
 }
 function entete(titre,sous,cible,nomCible){
-  return '<button type="button" class="retour" data-a="aller" data-e="'+(cible||"accueil")+'">'+I.retour+(nomCible||"Accueil")+'</button>'
+  var C=!cible&&U.depuisCat&&U.ecran!=="categorie"?CATEGORIES.filter(function(x){ return x[0]===U.depuisCat; })[0]:null;
+  if(C){ cible="categorie"; nomCible=C[1]; }
+  return '<button type="button" class="retour" data-a="aller" data-e="'+(cible||"accueil")+'"'+(C?' data-k="'+C[0]+'"':"")+'>'+I.retour+(nomCible||"Accueil")+'</button>'
     +'<div class="titre"><h1>'+h(titre)+'</h1>'+(sous?'<p>'+sous+'</p>':'')+'</div>';
 }
 function jauge(nom,val,niv,pct,bas){
@@ -2226,6 +2228,92 @@ function ecranFondation(){
     +'<p class="aide">Vous démarrez avec '+nombre(CAISSE_DEPART)+' '+U.fond.devise+' en caisse. L\'hôpital ne peut pas faire faillite.</p></div>'
     +'<button type="button" class="btn principal large" data-a="fonder">Fonder l\'hôpital</button>';
 }
+// Les tuiles, rangées par grandes catégories
+var CATEGORIES=[
+  ["soins","Soins","patients","g1",["patients","maladies","pharmacie","agenda","avispat","plan"]],
+  ["equipe","Équipe","equipe","g2",["equipe","planning","recrutement","missions"]],
+  ["batiment","Bâtiment","services","g7",["services","materiel","recherche","dev"]],
+  ["argent","Argent","finances","g6",["finances","tarifs","groupe","fondation","stats"]],
+  ["prestige","Prestige","coupe","g5",["objectifs","classement","tele","journal","moi"]]];
+function toutesTuiles(){
+  var t={}, nd=aDiagnostiquer().length, att=enAttente().length, jr=resultatJour();
+  t.patients=tuile("g1","patients","Patients",nd+" à diagnostiquer · "+(att+enSoin().length)+" en soins","patients");
+  t.maladies=tuile("g3","coeur","Maladies","Signes et tests","maladies");
+  t.equipe=tuile("g2","equipe","Équipe",pl(S.equipe.length,"personne","personnes"),"equipe");
+  t.planning=tuile("g6","calendrier","Planning",pl(enPosteMaintenant(),"soignant en poste","soignants en poste"),"planning");
+  t.recrutement=tuile("g4","recrut","Recrutement","Engager du personnel","recrutement");
+  t.services=tuile("g7","services","Services",pl(ORDRE_SERVICES.filter(function(k){return S.ouverts[k];}).length,"ouvert","ouverts"),"services");
+  t.pharmacie=tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie");
+  t.materiel=tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel");
+  t.recherche=tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche");
+  t.agenda=tuile("g3","calendrier","Agenda",pl(S.arrivees.filter(function(a){ return a.rdv&&a.t>maintenant(); }).length,"rendez-vous","rendez-vous")+" à venir","agenda");
+  t.avispat=tuile("g5","etoile","Avis",(S.avisPatients||[]).length?((S.avisPatients.reduce(function(n,a){ return n+a.e; },0)/S.avisPatients.length).toFixed(1).replace(".",",")+" / 5"):"Aucun avis","avispat");
+  t.dev=tuile("g6","flacon","Développement",(S.label?"Label qualité · ":"")+pl(S.sang||0,"poche","poches")+" de sang","dev");
+  t.plan=tuile("g1","services","Plan",pl(S.patients.length,"patient dans les murs","patients dans les murs"),"plan");
+  t.missions=tuile("g2","equipe","Missions",S.missions&&S.missions.en?"Équipe en mission":"Aide humanitaire","missions");
+  t.groupe=tuile("g6","finances","Investissements",FILIALES.filter(function(f){ return S.filiales&&S.filiales[f[0]]; }).length+" sur "+FILIALES.length+" achetés","groupe");
+  t.classement=tuile("g5","coupe","Classement",S.classement&&S.classement.rang?(S.classement.rang===1?"1er":S.classement.rang+"e")+" sur 20":"Le 1er du mois","classement");
+  t.tele=tuile("g3","journal","Journal télévisé",S.tele&&S.tele.liste.length?quandTxt(S.tele.liste[0].t):"Aucun reportage","tele");
+  t.fondation=tuile("g8","coeur","Fondation",S.fondation&&S.fondation.gala?"Gala "+(cleJour(S.fondation.gala.t)===cleJour(maintenant())?"ce soir":dateCourte(S.fondation.gala.t)):"Galas de charité","fondation");
+  t.objectifs=tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs");
+  t.stats=tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats");
+  t.tarifs=tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs");
+  t.finances=tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances");
+  t.journal=tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal");
+  t.moi=tuile("g8","moi","Ma fiche",mt(S.moi.argent)+" à vous","moi");
+  return t;
+}
+function resumeCategorie(k){
+  var nd=aDiagnostiquer().length;
+  if(k==="soins") return nd?pl(nd,"patient à diagnostiquer","patients à diagnostiquer"):pl(enAttente().length+enSoin().length,"patient en soins","patients en soins");
+  if(k==="equipe") return pl(enPosteMaintenant(),"soignant en poste","soignants en poste")+" · "+pl(S.equipe.length,"personne","personnes");
+  if(k==="batiment") return pl(ORDRE_SERVICES.filter(function(x){ return S.ouverts[x]; }).length,"service ouvert","services ouverts")+(S.pannes&&Object.keys(S.pannes).length?" · panne !":"");
+  if(k==="argent") return "Aujourd'hui "+signeM(resultatJour());
+  return S.classement&&S.classement.rang?(S.classement.rang===1?"1er":S.classement.rang+"e")+" au classement":OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" objectifs atteints";
+}
+function ecranCategorie(){
+  var C=CATEGORIES.filter(function(x){ return x[0]===U.cat; })[0]||CATEGORIES[0], t=toutesTuiles();
+  return barre()+entete(C[1],resumeCategorie(C[0]))+'<div class="tuiles">'+C[4].map(function(k){ return t[k]||""; }).join("")+'</div>';
+}
+// Le conseiller : l'adjointe du directeur passe tout en revue et ne garde que les deux priorités du moment
+function conseils(){
+  var l=[], t=maintenant(), k, n, pire, l2, causes={}, att, p;
+  function c(prio,txt,cible,bouton){ l.push([prio,txt,cible,bouton]); }
+  if(S.pannes&&Object.keys(S.pannes).length) c(95,"Un équipement est en panne ("+MATERIEL.filter(function(m){ return S.pannes[m[0]]; }).map(function(m){ return m[1]; }).join(", ")+") : faites-le réparer, il ne sert plus à rien.","materiel","Matériel");
+  if(S.sang!==undefined&&S.palier>=2&&S.sang<SEUIL_SANG&&!S.sangAuto) c(90,"Il ne reste que "+S.sang+" poches de sang : organisez une collecte, sinon les opérations vont s'arrêter.","dev","Banque de sang");
+  ORDRE_SERVICES.forEach(function(k){ if(S.ouverts[k]&&!SERVICES[k].diag&&!soignantsDe(k)) c(88,"Le service "+SERVICES[k].nom+" est ouvert mais personne n'y travaille : recrutez, ou ses patients partiront.","recrutement","Recruter"); });
+  if(S.caisse<0) c(85,"La caisse est à découvert : la banque prélève des intérêts chaque jour. Remontez vos tarifs les plus bas ou reportez les achats.","tarifs","Tarifs");
+  // les patients qui attendent : quel service déborde ?
+  att={}; S.patients.forEach(function(p){ if(p.etat==="attente") att[p.sv]=(att[p.sv]||0)+1; });
+  pire=Object.keys(att).sort(function(a,b){ return att[b]-att[a]; })[0];
+  if(pire&&att[pire]>=4) c(80,att[pire]+" patients attendent en "+SERVICES[pire].nom+" : ajoutez quelqu'un sur ce poste dans le planning, ou recrutez.","planning","Planning");
+  if(aDiagnostiquer().length>=5) c(75,aDiagnostiquer().length+" patients attendent un diagnostic. Posez-en quelques-uns vous-même : vos diagnostics rendent les patients plus contents.","patients","Patients");
+  if(couvAccueil()<1&&S.portes) c(70,"L'accueil est débordé : un secrétaire de plus rendrait chaque patient plus satisfait.","recrutement","Recruter");
+  if(couvProprete()<1&&S.portes) c(70,"Les locaux ne sont pas assez propres : un agent d'entretien de plus remonterait la réputation.","recrutement","Recruter");
+  if(couvLits()<1) c(68,"Trop de patients alités pour vos infirmiers : recrutez un infirmier.","recrutement","Recruter");
+  ORDRE_ROLES.forEach(function(r){ if(nb(r)&&moral(r)<45) c(65,"Le moral des "+ROLES[r].pluriel.toLowerCase()+" est bas ("+moral(r)+") : augmentez un peu leur salaire, ou allégez leur planning.","equipe","Équipe"); });
+  // ce que disent les avis
+  (S.avisPatients||[]).slice(0,15).forEach(function(a){ if(a.e<=2) causes[a.txt]=(causes[a.txt]||0)+1; });
+  k=Object.keys(causes).sort(function(a,b){ return causes[b]-causes[a]; })[0];
+  if(k&&causes[k]>=3) c(60,"Les patients se plaignent : « "+k+" » revient souvent dans leurs avis.","avispat","Avis");
+  ORDRE_SERVICES.forEach(function(k){ if(S.ouverts[k]&&!SERVICES[k].diag&&demandeCible(k)<0.75) c(55,"Vos prix en "+SERVICES[k].nom+" font fuir les patients : la fréquentation y baisse.","tarifs","Tarifs"); });
+  n=produitsConnus().filter(function(k){ return stockDe(k)===0; }).length;
+  if(n&&!S.pharma.auto) c(58,pl(n,"médicament est","médicaments sont")+" en rupture : activez la commande automatique.","pharmacie","Pharmacie");
+  // les occasions
+  p=prochainPalier();
+  if(p&&S.soignes>=p.min&&reputation()<p.rep) c(50,"Il ne vous manque que la réputation pour devenir « "+p.nom+" » : "+Math.round(reputation())+" sur "+p.rep+" demandés.","avispat","Avis");
+  ORDRE_SERVICES.forEach(function(k){ var sv=SERVICES[k]; if(sv.palier<=S.palier&&!S.ouverts[k]&&S.caisse>=sv.cout*2) c(40,"Vous avez de quoi ouvrir le service "+sv.nom+" ("+mt(sv.cout)+") : ses patients sont pour l'instant envoyés ailleurs.","services","Services"); });
+  if(S.palier>=ACCRED_PALIER&&!S.label&&!(S.accred&&(S.accred.etat==="audit"||S.accred.fin>t))&&S.caisse>=ACCRED_COUT*3) c(35,"Votre hôpital tourne bien : demandez l'accréditation qualité, pour 8 % de patients en plus.","dev","Développement");
+  if(S.caisse>300000&&FILIALES.some(function(f){ return ((S.filiales&&S.filiales[f[0]])||0)<FILIALE_MAX&&S.caisse>=f[2]*2; })) c(30,"La caisse dort : un investissement (pharmacie, maison de repos, clinique…) rapporterait chaque jour.","groupe","Investissements");
+  l.sort(function(a,b){ return b[0]-a[0]; });
+  return l.filter(function(x,i){ return l.findIndex(function(y){ return y[1]===x[1]; })===i; }).slice(0,2);
+}
+function conseillerHtml(){
+  var l=conseils();
+  if(!S.portes) return "";
+  return '<div class="carte conseil"><div class="carte-haut"><div class="entete"><span class="tuile-icone g1">'+I.moi+'</span><h3>Votre adjointe, Claire<small>'+(l.length?"Les priorités du moment":"Tout roule, rien à signaler.")+'</small></h3></div></div>'
+    +(l.length?'<ul class="liste">'+l.map(function(x){ return '<li class="rang"><div><small style="color:var(--ink)">'+x[1]+'</small></div><div class="droite"><button type="button" class="btn petit" data-a="aller" data-e="'+x[2]+'">'+x[3]+'</button></div></li>'; }).join("")+'</ul>':"")+'</div>';
+}
 function ecranAccueil(){
   var rep=Math.round(reputation()), att=enAttente().length, nd=aDiagnostiquer().length, occ=alites().length, jr=resultatJour(), al=alertes(), pro=S.arrivees.length?S.arrivees[0].t:null;
   var r=U.resume, bloc="";
@@ -2252,32 +2340,9 @@ function ecranAccueil(){
     +ministreHtml()
     +villeHtml()
     +vieHtml()
-    +(al?'<div class="alertes">'+al+'</div>':"")
-    +'<div class="tuiles">'
-    +tuile("g1","patients","Patients",nd+" à diagnostiquer · "+(att+enSoin().length)+" en soins","patients")
-    +tuile("g3","coeur","Maladies","Signes et tests","maladies")
-    +tuile("g2","equipe","Équipe",pl(S.equipe.length,"personne","personnes"),"equipe")
-    +tuile("g6","calendrier","Planning",pl(enPosteMaintenant(),"soignant en poste","soignants en poste"),"planning")
-    +tuile("g4","recrut","Recrutement","Engager du personnel","recrutement")
-    +tuile("g7","services","Services",pl(ORDRE_SERVICES.filter(function(k){return S.ouverts[k];}).length,"ouvert","ouverts"),"services")
-    +tuile("g2","pilule","Pharmacie",pl(produitsConnus().filter(function(k){ return stockDe(k)<=SEUIL_STOCK; }).length,"stock bas","stocks bas"),"pharmacie")
-    +tuile("g7","outil","Matériel",MATERIEL.filter(function(m){ return niv(m[0]); }).length+" sur "+MATERIEL.length+" équipés","materiel")
-    +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
-    +tuile("g3","calendrier","Agenda",pl(S.arrivees.filter(function(a){ return a.rdv&&a.t>maintenant(); }).length,"rendez-vous","rendez-vous")+" à venir","agenda")
-    +tuile("g5","etoile","Avis",(S.avisPatients||[]).length?((S.avisPatients.reduce(function(n,a){ return n+a.e; },0)/S.avisPatients.length).toFixed(1).replace(".",",")+" / 5"):"Aucun avis","avispat")
-    +tuile("g6","flacon","Développement",(S.label?"Label qualité · ":"")+pl(S.sang||0,"poche","poches")+" de sang","dev")
-    +tuile("g1","services","Plan",pl(S.patients.length,"patient dans les murs","patients dans les murs"),"plan")
-    +tuile("g2","equipe","Missions",S.missions&&S.missions.en?"Équipe en mission":"Aide humanitaire","missions")
-    +tuile("g6","finances","Investissements",FILIALES.filter(function(f){ return S.filiales&&S.filiales[f[0]]; }).length+" sur "+FILIALES.length+" achetés","groupe")
-    +tuile("g5","coupe","Classement",S.classement&&S.classement.rang?(S.classement.rang===1?"1er":S.classement.rang+"e")+" sur 20":"Le 1er du mois","classement")
-    +tuile("g3","journal","Journal télévisé",S.tele&&S.tele.liste.length?quandTxt(S.tele.liste[0].t):"Aucun reportage","tele")
-    +tuile("g8","coeur","Fondation",S.fondation&&S.fondation.gala?"Gala "+(cleJour(S.fondation.gala.t)===cleJour(maintenant())?"ce soir":dateCourte(S.fondation.gala.t)):"Galas de charité","fondation")
-    +tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs")
-    +tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats")
-    +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
-    +tuile("g6","finances","Finances","Aujourd'hui "+signeM(jr),"finances")
-    +tuile("g1","journal","Journal",S.journal.length?quandTxt(S.journal[0].t):"Rien à signaler","journal")
-    +tuile("g8","moi","Ma fiche",mt(S.moi.argent)+" à vous","moi")
+    +conseillerHtml()
+    +(al?(U.alertes||(al.match(/class="alerte/g)||[]).length<=3?'<div class="alertes">'+al+'</div>'+((al.match(/class="alerte/g)||[]).length>3?'<button type="button" class="btn petit" data-a="alertes">Masquer les alertes</button>':""):'<button type="button" class="btn" data-a="alertes">Voir les '+pl((al.match(/class="alerte/g)||[]).length,"alerte","alertes")+'</button>'):"")
+    +'<div class="tuiles">'+CATEGORIES.map(function(C){ return '<button type="button" class="tuile" data-a="categorie" data-k="'+C[0]+'"><span class="tuile-icone '+C[3]+'">'+I[C[2]]+'</span><span class="tuile-texte"><span class="tuile-nom">'+C[1]+'</span><span class="tuile-chiffre">'+resumeCategorie(C[0])+'</span></span></button>'; }).join("")
     +'</div>'
     +palierHtml()
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
@@ -3120,7 +3185,7 @@ function navigation(){
 /* ------------------------------------------------------------------ Actions */
 // Chaque action renvoie true quand la partie a changé (à enregistrer), false quand seul l'écran a changé
 var A={
-  aller:function(d){ if(d.e==="mutuelles"){ d={e:"finances"}; U.finPage="mutuelles"; } U.ecran=d.e; U.confirme=null; U.retour=null; U.dossier=null; U.choix=null; U.trait=null; if(d.e==="recrutement"){ candidatsDe(roleCourant()); return true; } return false; },
+  aller:function(d){ if(d.e==="categorie"&&d.k) U.cat=d.k; U.depuisCat=U.ecran==="categorie"?U.cat:null; if(d.e==="mutuelles"){ d={e:"finances"}; U.finPage="mutuelles"; } U.ecran=d.e; U.confirme=null; U.retour=null; U.dossier=null; U.choix=null; U.trait=null; if(d.e==="recrutement"){ candidatsDe(roleCourant()); return true; } return false; },
   devise:function(d){ U.fond.devise=d.k; return false; },
   fonder:function(){
     var t=Date.now(), g={moi:S.moi,prestige:S.prestige||0,heritage:S.heritage||[],perso:S.perso};
@@ -3171,6 +3236,8 @@ var A={
   sangauto:function(d){ S.sangAuto=d.k==="1"; return true; },
   reviser:function(d){ var m=MATERIEL.filter(function(x){ return x[0]===d.k; })[0], c=0, i, t=maintenant(); if(!m) return false; for(i=0;i<nivBrut(m[0]);i++) c+=m[2]*COUT_NIVEAU[i]; c=Math.round(c*REVISION); if(S.caisse<c) return false; inscrire(t,"e:materiel",c); S.usure[m[0]]=0; return true; },
   reparer:function(d){ var m=MATERIEL.filter(function(x){ return x[0]===d.k; })[0], c=0, i, t=maintenant(); if(!m) return false; for(i=0;i<nivBrut(m[0]);i++) c+=m[2]*COUT_NIVEAU[i]; c=Math.round(c*REPARATION); if(S.caisse<c) return false; inscrire(t,"e:materiel",c); delete S.pannes[m[0]]; S.usure[m[0]]=0; noter(t,"ok",m[1]+" est réparé ("+mt(c)+")."); if(m[0]==="ambulance"||m[0]==="heliport"||m[0]==="aile") replanifier(t); return true; },
+  alertes:function(){ U.alertes=!U.alertes; return false; },
+  categorie:function(d){ U.cat=d.k; U.ecran="categorie"; return false; },
   planmode:function(d){ U.planMode=d.k; return false; },
   campagne:function(d){
     if(modeCampagne()) return false;
@@ -3508,7 +3575,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,fondation:ecranFondation2,groupe:ecranGroupe,classement:ecranClassement,tele:ecranTele,plan:ecranPlan,missions:ecranMissions,dev:ecranDev,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,fondation:ecranFondation2,groupe:ecranGroupe,classement:ecranClassement,tele:ecranTele,plan:ecranPlan,missions:ecranMissions,dev:ecranDev,categorie:ecranCategorie,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 var MOTS_BELGES=[[/rembourse une somme fixe, 60 %/g,"rembourse une somme fixe, 75 %"],[/rembourse 60 %/g,"rembourse 75 %"],[/Remboursé par la mutuelle/g,"Remboursé par la mutualité (INAMI)"],[/Payé par le patient/g,"Ticket modérateur"],[/Mutuelles/g,"Mutualités"],[/mutuelles/g,"mutualités"],[/Mutuelle/g,"Mutualité"],[/mutuelle/g,"mutualité"]];
 function motsBelges(racine){
   var w, n, v;
