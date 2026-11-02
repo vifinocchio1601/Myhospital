@@ -1014,11 +1014,11 @@ function planAuto(e){
   return plan;
 }
 // Répartit toute l'équipe d'un métier sur la semaine : cinq postes chacun, un par jour au plus, trois nuits au plus,
-// en remplissant d'abord les postes les moins couverts. Les nuits ne sont prévues que pour les services d'urgence ouverts.
+// en remplissant d'abord les postes les moins couverts : les matins, puis les après-midi, puis les nuits.
 function planMetier(role){
   var R=ROLES[role], sv=SERVICES[R.service], gens=S.equipe.filter(function(e){ return e.role===role; }), postes, cov={}, i, j, mieux, nb={}, nuits={}, garde=0;
   if(!gens.length) return;
-  postes=deJour(gens[0])?["M"]:sv&&sv.vital&&S.ouverts[R.service]?["M","A","N"]:["M","A"];
+  postes=deJour(gens[0])?["M"]:["M","A","N"];
   gens.forEach(function(e){ e.plan=["R","R","R","R","R","R","R"]; nb[e.id]=0; nuits[e.id]=0; });
   for(j=0;j<7;j++) postes.forEach(function(k){ cov[j+k]=0; });
   while(garde++<500){
@@ -1027,6 +1027,8 @@ function planMetier(role){
       gens.forEach(function(e){
         var sc;
         if(nb[e.id]>=5||e.plan[j]!=="R"||(k==="N"&&nuits[e.id]>=3)) return;
+        // Pas de matin juste après une nuit
+        if((k==="M"&&e.plan[(j+6)%7]==="N")||(k==="N"&&e.plan[(j+1)%7]==="M")) return;
         // Le poste le moins couvert d'abord, puis la personne la moins chargée, et chacun garde de préférence le même poste
         sc=cov[j+k]*1000+nb[e.id]*10+(e.plan.indexOf(k)>=0?0:3)+ik+j*0.01;
         if(!mieux||sc<mieux.sc) mieux={sc:sc,e:e,j:j,k:k};
