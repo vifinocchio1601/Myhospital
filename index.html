@@ -293,7 +293,9 @@ button.test:hover:not(:disabled){border-color:var(--faint)}
 "use strict";
 
 /* ------------------------------------------------------------------ Règles de l'hôpital */
-var V=1, CLE="myhospital-v1", CLE_APP="myhospital-appareil";
+var CLE_MODE="myhospital-mode", CLE_RECOMPENSE="myhospital-recompense", CLE_CAMPAGNES="myhospital-campagnes";
+function modeCampagne(){ try{ return localStorage.getItem(CLE_MODE)||""; }catch(e){ return ""; } }
+var V=1, CLE=modeCampagne()?"myhospital-campagne":"myhospital-v1", CLE_APP="myhospital-appareil";
 var MIN=60000, HEURE=3600000, JOUR=86400000, TRANCHE=20*MIN, PAIE_DIRECTEUR=100;
 var CAISSE_DEPART=5000, PRIX_LIT=1500, ENTRETIEN_LIT=12, REF_LIT=450, LITS_PAR_INFIRMIER=5, PAR_SECRETAIRE=30, PAR_AGENT=30;
 var PART_FOURNITURES=0.08, TAUX_DECOUVERT=0.002, TAUX_EVENEMENT=0.45;
@@ -518,8 +520,24 @@ var CLE_SONS="myhospital-sons", CLE_MUSIQUE="myhospital-musique";
 // Personnages : un caractère pour chacun, des amitiés et des rivalités, et des moments de vie auxquels le directeur répond
 var CARACTERES={jovial:["Jovial","Joviale","toujours de bonne humeur (+5 de moral)"],perfectionniste:["Perfectionniste","Perfectionniste","soigne un peu mieux, mais se met la pression (−3 de moral)"],raleur:["Râleur","Râleuse","râle souvent (−5 de moral), mais travaille plus vite"],meneur:["Meneur","Meneuse","remonte le moral de ses collègues du même métier (+3)"],discret:["Discret","Discrète","fait son travail sans histoires"]};
 var TAUX_VIE=0.35, TAUX_RELATION=0.3;
+// Mode campagne : des scénarios joués dans une partie à part. Réussis, ils rapportent de l'argent personnel dans l'hôpital principal.
+// Objectif : [libellé, valeur actuelle, cible, sens] ; sens 1 = au moins, −1 = au plus.
+var SCENARIOS=[
+  {id:"desert",nom:"Désert médical",txt:"Un village sans médecin. Partez d'un cabinet vide et faites-en une clinique.",jours:5,prime:25000,type:"atteindre",palier:0,caisse:4000,rep:50,equipe:[],ouverts:[],lits:0,
+    obj:function(){ return [["Devenir une clinique",S.palier,1,1]]; }},
+  {id:"faillite",nom:"L'hôpital en faillite",txt:"Vous reprenez un hôpital à découvert et mal vu. Remettez-le à flot.",jours:7,prime:50000,type:"atteindre",palier:2,caisse:-2000,rep:35,
+    equipe:["generaliste","generaliste","generaliste","infirmier","infirmier","infirmier","urgentiste","radiologue","secretaire","agent"],ouverts:["urgences","imagerie"],lits:6,
+    obj:function(){ return [["Caisse d'au moins "+mt(30000),Math.round(S.caisse),30000,1],["Réputation d'au moins 60",Math.round(reputation()),60,1]]; }},
+  {id:"pandemie",nom:"Pandémie",txt:"Une vague de grippe et de pneumonies submerge la région. Tenez cinq jours.",jours:5,prime:60000,type:"tenir",palier:2,caisse:30000,rep:60,
+    equipe:["generaliste","generaliste","generaliste","generaliste","infirmier","infirmier","infirmier","infirmier","urgentiste","urgentiste","radiologue","secretaire","secretaire","agent","agent"],ouverts:["urgences","imagerie"],lits:8,
+    obj:function(){ return [["Au plus 3 décès",(S.medical&&S.medical.deces)||0,3,-1],["Réputation d'au moins 60",Math.round(reputation()),60,1]]; }},
+  {id:"course",nom:"La course au CHU",txt:"Une petite clinique ambitieuse. Devenez un CHU en deux semaines.",jours:14,prime:100000,type:"atteindre",palier:1,caisse:20000,rep:55,
+    equipe:["generaliste","generaliste","infirmier","infirmier","urgentiste","secretaire","agent"],ouverts:["urgences"],lits:4,
+    obj:function(){ return [["Devenir un CHU",S.palier,3,1]]; }}];
 var BIOS=["Ancien boulanger à la retraite, vient avec sa fille.","Institutrice, toujours pressée de retourner à l'école.","Agriculteur, n'aime pas trop les hôpitaux.","Étudiant, vient en bus.","Chauffeur de camion, souvent sur la route.","Grand-mère de six petits-enfants.","Ancien footballeur du club local.","Infirmière retraitée, pose beaucoup de questions.","Commerçant du centre-ville.","Musicien, joue dans un groupe le week-end.","Comptable, très ponctuel.","Jeune papa, a peu dormi."];
 // Mode belge réaliste : mutualités et INAMI, ticket modérateur, pas de supplément pour une chambre commune, financement fédéral (BMF) par lit
+var ANIM_SALLES=["accueil","urgences","consult","soins","imagerie","chirurgie","maternite","pediatrie","dentaire","rea","cardio","psy","greffe","onco","lits","privees"];
+var anim={id:0,pos:{},ambu:null,vus:{},coul:null,tc:0};
 var PART_BELGE=0.25, BMF_LIT=2000, BMF_PALIER=5000;
 // Le plan du bâtiment, étage par étage
 var ETAGES=[["Rez-de-chaussée",["accueil","urgences","consult","soins","imagerie","pharmacie"]],["1er étage",["chirurgie","maternite","pediatrie","dentaire"]],["2e étage",["rea","cardio","psy","greffe","onco"]],["3e étage",["lits","privees"]],["Annexes",["recherche","ecole","cafeteria","parking"]]];
@@ -898,7 +916,7 @@ function testsEnCours(p,t){ var fin=0, k; for(k in p.tests) if(p.tests[k]>t&&p.t
 function coutTest(k){ var T=TESTS[k]; return T.imagerie||!T.cout?T.cout:Math.max(1,Math.round(T.cout*(1-0.2*niv("labo")))); }
 function saisonDe(t){ var m=new Date(t).getMonth(); return m===11||m<2?0:m<5?1:m<8?2:3; }
 // Le poids d'une maladie selon la saison ; une maladie propre à une saison n'existe pas le reste de l'année
-function poidsSaison(k,t){ var i=saisonDe(t), m=MALADIES[k], P=periodeDe(t), M=meteoDe(); if(m.saison!==undefined&&m.saison!==i) return 0; return (SAISONS[i].m[k]||1)*(P&&P[4][k]||1)*(M&&M[2][k]||1)*(m.rare?RARETE:1); }
+function poidsSaison(k,t){ var i=saisonDe(t), m=MALADIES[k], P=periodeDe(t), M=meteoDe(); if(m.saison!==undefined&&m.saison!==i) return 0; return (SAISONS[i].m[k]||1)*(P&&P[4][k]||1)*(M&&M[2][k]||1)*(m.rare?RARETE:1)*(S.campagne&&S.campagne.id==="pandemie"&&["grippe","bronchite","pneumonie","bronchiolite"].indexOf(k)>=0?4:1); }
 function periodeDe(t){ var d=new Date(t), x=deux(d.getMonth()+1)+deux(d.getDate()), i; for(i=0;i<PERIODES.length;i++) if(x>=PERIODES[i][0]&&x<=PERIODES[i][1]) return PERIODES[i]; return null; }
 function meteoCle(){
   var M=S.meteo&&S.meteo.cur, c;
@@ -1102,6 +1120,55 @@ function planGroupe(roles){
   }
 }
 function groupeDe(role){ return (GROUPES_PLANNING.filter(function(x){ return x[3].indexOf(role)>=0; })[0]||[0,0,0,[role]])[3]; }
+function embaucher(role,t){
+  var c=identite(Math.random()<0.5), exp=Math.random()<0.5?1:0;
+  c={id:S.nEquipe++,prenom:c.prenom,nom:c.nom,femme:c.femme,age:entre(EXP[exp].age[0],EXP[exp].age[1]),role:role,exp:exp,interne:0,atouts:[],na:0,depuis:t,occupe:null,minutes:0,soignes:0};
+  c.xp=SEUILS_XP[exp]; c.caractere=tirer(Object.keys(CARACTERES)); c.plan=["R","R","R","R","R","R","R"]; S.equipe.push(c);
+}
+function creerScenario(id){
+  var X=SCENARIOS.filter(function(x){ return x.id===id; })[0], t=Date.now();
+  if(!X) return false;
+  S=etatInitial(); S.nom=X.nom; S.prenom="Vincent"; S.devise="$";
+  S.fondeLe=t; S.horloge=t; S.prochaineCloture=prochainMinuit(t); S.releve=prochaineReleve(t);
+  S.palier=X.palier; S.caisse=X.caisse; S.avis=S.avis.map(function(){ return X.rep; }); S.lits=X.lits;
+  X.ouverts.forEach(function(k){ S.ouverts[k]=true; });
+  X.equipe.forEach(function(r){ embaucher(r,t); });
+  GROUPES_PLANNING.forEach(function(G){ planGroupe(G[3]); });
+  S.portes=S.equipe.some(estSoignant);
+  produitsConnus().forEach(function(k){ S.stock[k]=STOCK_DEPART*2; S.valStock[k]=STOCK_DEPART*2*PRODUITS[k].cout; });
+  S.campagne={id:id,debut:t,fin:t+X.jours*JOUR,fini:""};
+  noter(t,"ok","Campagne « "+X.nom+" » : "+X.txt+" Vous avez "+X.jours+" jours.");
+  if(S.portes) replanifier(t);
+  return true;
+}
+function verifierCampagne(t){
+  var C=S.campagne, X, o, ok, l;
+  if(!C||C.fini) return;
+  X=SCENARIOS.filter(function(x){ return x.id===C.id; })[0]; if(!X) return;
+  o=X.obj(); ok=o.every(function(x){ return x[3]>0?x[1]>=x[2]:x[1]<=x[2]; });
+  if((X.type==="atteindre"&&ok)||(t>=C.fin&&ok)){
+    C.fini="ok";
+    try{ localStorage.setItem(CLE_RECOMPENSE,String((+localStorage.getItem(CLE_RECOMPENSE)||0)+X.prime)); l=JSON.parse(localStorage.getItem(CLE_CAMPAGNES)||"{}"); l[C.id]=1; localStorage.setItem(CLE_CAMPAGNES,JSON.stringify(l)); }catch(e){}
+    noter(t,"ok","Campagne réussie ! "+mt(X.prime)+" vous attendent sur votre compte personnel, dans votre hôpital.");
+    son("succes",t); notifier("Campagne réussie",X.nom+" : "+mt(X.prime)+" gagnés.",t);
+  } else if(t>=C.fin){ C.fini="echec"; noter(t,"bad","Campagne échouée : le temps est écoulé."); son("erreur",t); }
+}
+function campagneHtml(){
+  var C=S.campagne, X;
+  if(!C) return "";
+  X=SCENARIOS.filter(function(x){ return x.id===C.id; })[0];
+  return '<div class="carte crise"><div class="carte-haut"><h3>Campagne : '+X.nom+'<small>'+X.txt+'</small></h3>'+(C.fini?'<span class="puce '+(C.fini==="ok"?"ok":"bad")+'">'+(C.fini==="ok"?"Réussie":"Échouée")+'</span>':'<span class="puce warn num">reste <span data-reste="'+C.fin+'">'+resteTxt(C.fin)+'</span></span>')+'</div>'
+    +'<ul class="liste">'+X.obj().map(function(o){ var ok=o[3]>0?o[1]>=o[2]:o[1]<=o[2]; return '<li class="rang"><div><b>'+o[0]+'</b><small>En ce moment : '+(typeof o[1]==="number"&&o[2]>1000?mt(o[1]):o[1])+'</small></div><div class="droite"><span class="puce '+(ok?"ok":"")+'">'+(ok?"✓":"…")+'</span></div></li>'; }).join("")+'</ul>'
+    +'<p class="aide">'+(X.type==="tenir"?"Les objectifs doivent être tenus jusqu'à la fin.":"Atteignez les objectifs avant la fin.")+' Récompense : '+mt(X.prime)+' sur votre compte personnel.</p>'
+    +'<div class="actions"><button type="button" class="btn'+(C.fini?" principal":"")+'" data-a="quittercamp">Revenir à mon hôpital</button></div></div>';
+}
+function campagnesHtml(){
+  var faits={};
+  try{ faits=JSON.parse(localStorage.getItem(CLE_CAMPAGNES)||"{}"); }catch(e){}
+  if(modeCampagne()) return '<div class="carte"><h2>Mode campagne</h2><p class="aide">Vous jouez une campagne. Votre hôpital vous attend, intact.</p><div class="actions"><button type="button" class="btn principal" data-a="quittercamp">Revenir à mon hôpital</button></div></div>';
+  return '<div class="carte"><h2>Mode campagne</h2><p class="aide">Des scénarios joués dans une partie à part : votre hôpital est mis de côté pendant ce temps et continue de tourner. Réussis, ils rapportent de l\'argent sur votre compte personnel.</p><ul class="liste">'
+    +SCENARIOS.map(function(x){ return '<li class="rang"><div><b>'+x.nom+(faits[x.id]?" ✓":"")+'</b><small>'+x.txt+' '+x.jours+' jours · récompense '+mt(x.prime)+'</small></div><div class="droite"><button type="button" class="btn petit principal" data-a="campagne" data-k="'+x.id+'">Jouer</button></div></li>'; }).join("")+'</ul></div>';
+}
 function nouvelleRelation(c){
   var l=S.equipe.filter(function(x){ return groupeDe(x.role)===groupeDe(c.role); }), o;
   if(!l.length||Math.random()>=TAUX_RELATION) return;
@@ -1497,6 +1564,7 @@ function planifierEvenement(debut){
   if(Math.random()<TAUX_EVENEMENT){ S.evts.push({t:debut+Math.round(alea(8,20)*HEURE)}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
 }
 function verifierObjectifs(t){
+  if(S.campagne){ verifierCampagne(t); return; }
   if(!S.objectifs) S.objectifs={};
   OBJECTIFS.forEach(function(o){
     if(S.objectifs[o[0]]||o[5]()<o[3]) return;
@@ -2063,6 +2131,7 @@ function ecranAccueil(){
     +'<div class="bloc"><button type="button" class="btn principal large" data-a="patient"'+(S.portes?"":" disabled")+'>'+I.plus+'Faire entrer un patient</button>'
     +'<p class="aide">'+(S.portes?(pro?"Prochain patient attendu "+(cleJour(pro)===cleJour(maintenant())?"vers ":"demain vers ")+heureTxt(pro)+".":"Plus de patient prévu aujourd'hui."):"Le cabinet n'a pas encore ouvert ses portes.")+'</p></div>'
     +bloc
+    +campagneHtml()
     +bonusHtml()
     +calendrierHtml()
     +criseHtml()
@@ -2618,9 +2687,71 @@ function salleHtml(k){
   return '<button type="button" class="salle'+(verrou?" verrou":!ouvert?" ferme":"")+'" data-a="aller" data-e="'+cible+'"><b>'+nom+'</b><small>'+info+'</small><span class="pts">'+pts.slice(0,24).join("")+(pts.length>24?'<span class="plus-pts">+'+(pts.length-24)+'</span>':"")+'</span></button>';
 }
 function ecranPlan(){
-  return barre()+entete("Plan de l'hôpital","Les patients en temps réel : point plein en attente, point entouré en soins")
+  var mode=U.planMode||"anime";
+  return barre()+entete("Plan de l'hôpital","Les patients en temps réel")
+    +'<div class="onglets"><button type="button" class="onglet'+(mode==="anime"?" actif":"")+'" data-a="planmode" data-k="anime">Vue animée</button><button type="button" class="onglet'+(mode==="etages"?" actif":"")+'" data-a="planmode" data-k="etages">Par étage</button></div>'
+    +(mode==="anime"?'<div class="carte" style="padding:8px"><canvas id="vue" style="width:100%;display:block;border-radius:10px" aria-label="Vue animée de l\'hôpital"></canvas></div><p class="aide">Chaque point est un patient, de la couleur de son triage : il passe par l\'accueil, attend dans son service (à gauche), est soigné (à droite, entouré), puis monte dans un lit. Les petits carrés blancs sont les soignants en poste. Les cas graves arrivent en ambulance.</p>':ecranEtages());
+}
+function ecranEtages(){
+  return ''
     +'<p class="aide">La couleur d\'un point suit le triage du patient. Touchez une salle pour y aller.</p>'
     +ETAGES.map(function(E){ return '<div class="bloc"><h2>'+E[0]+'</h2><div class="salles">'+E[1].map(salleHtml).join("")+'</div></div>'; }).join("");
+}
+function geometrie(W){
+  var g=8, cw=(W-g*5)/4, ch=Math.max(64,cw*0.9), salles={};
+  ANIM_SALLES.forEach(function(k,i){ salles[k]={x:g+(i%4)*(cw+g),y:g+Math.floor(i/4)*(ch+g),w:cw,h:ch}; });
+  return {salles:salles,H:g+4*(ch+g)+70,porte:{x:W/2,y:g+4*(ch+g)+12},route:g+4*(ch+g)+44};
+}
+function cibleDe(p,G){
+  var k=p.etat==="diag"?"accueil":p.etat==="lit"?(p.prive?"privees":"lits"):p.sv, r=G.salles[k], gauche=p.etat!=="soin", col=p.id%4, lig=Math.floor(p.id/4)%3;
+  if(!r) r=G.salles.accueil;
+  if(p.etat==="lit"||p.etat==="diag") return {x:r.x+10+(p.id%6)*(r.w-20)/5,y:r.y+26+(Math.floor(p.id/6)%3)*(r.h-34)/3};
+  return {x:r.x+(gauche?8:r.w/2+6)+col*((r.w/2-16)/3),y:r.y+28+lig*((r.h-36)/2)};
+}
+function dessiner(){
+  var c=document.getElementById("vue"), x, dpr, W, G, now=Date.now(), cs, vivants={};
+  if(!c||U.ecran!=="plan"||(U.planMode||"anime")!=="anime"){ anim.id=0; return; }
+  anim.id=requestAnimationFrame(dessiner);
+  dpr=window.devicePixelRatio||1; W=c.clientWidth||340; G=geometrie(W);
+  if(c.width!==Math.round(W*dpr)||c.height!==Math.round(G.H*dpr)){ c.width=Math.round(W*dpr); c.height=Math.round(G.H*dpr); c.style.height=G.H+"px"; }
+  x=c.getContext("2d"); x.setTransform(dpr,0,0,dpr,0,0);
+  if(!anim.coul||now-anim.tc>2000){ cs=getComputedStyle(document.documentElement); anim.tc=now; anim.coul={}; ["--surface","--surface-2","--line","--ink","--muted","--faint","--accent","--tri-rouge","--tri-orange","--tri-jaune","--tri-vert","--tri-bleu","--bad"].forEach(function(v){ anim.coul[v]=cs.getPropertyValue(v).trim()||"#888"; }); }
+  var C=anim.coul;
+  x.clearRect(0,0,W,G.H);
+  // salles
+  ANIM_SALLES.forEach(function(k){
+    var r=G.salles[k], sv=SERVICES[k], ouvert=k==="accueil"||(k==="lits"?S.lits>0:k==="privees"?(S.privees||0)>0:!!S.ouverts[k]), verrou=sv?sv.palier>S.palier:(S.palier<1&&k!=="accueil"), nom=k==="accueil"?"Accueil":k==="lits"?"Lits":k==="privees"?"Chambres privées":sv.nom, n=0, i;
+    x.globalAlpha=verrou?0.3:ouvert?1:0.55;
+    x.fillStyle=C["--surface-2"]; x.strokeStyle=C["--line"]; x.lineWidth=1;
+    x.beginPath(); if(x.roundRect) x.roundRect(r.x,r.y,r.w,r.h,8); else x.rect(r.x,r.y,r.w,r.h); x.fill(); x.stroke();
+    x.fillStyle=C["--ink"]; x.font="600 10px Inter,-apple-system,sans-serif"; x.fillText(nom.length>14?nom.slice(0,13)+"…":nom,r.x+6,r.y+13);
+    if(sv&&ouvert){ x.strokeStyle=C["--line"]; x.beginPath(); x.moveTo(r.x+r.w/2,r.y+20); x.lineTo(r.x+r.w/2,r.y+r.h-6); x.stroke(); n=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&enPoste(e); }).length; }
+    x.fillStyle=C["--ink"]; for(i=0;i<Math.min(n,5);i++) x.fillRect(r.x+r.w-10-i*7,r.y+r.h-10,5,5);
+    x.globalAlpha=1;
+  });
+  // route, porte
+  x.fillStyle=C["--surface"]; x.fillRect(0,G.route-10,W,20);
+  x.strokeStyle=C["--faint"]; x.setLineDash([8,8]); x.beginPath(); x.moveTo(0,G.route); x.lineTo(W,G.route); x.stroke(); x.setLineDash([]);
+  x.fillStyle=C["--accent"]; x.fillRect(G.porte.x-16,G.porte.y-4,32,6);
+  x.fillStyle=C["--muted"]; x.font="500 9px Inter,-apple-system,sans-serif"; x.fillText("Entrée",G.porte.x-14,G.porte.y+14);
+  // patients
+  S.patients.forEach(function(p){
+    var cib=cibleDe(p,G), q=anim.pos[p.id];
+    vivants[p.id]=1;
+    if(!q){ q=anim.pos[p.id]={x:G.porte.x+(Math.random()*16-8),y:G.porte.y}; if((p.tri==="rouge"||p.tri==="orange")&&now-p.arrive<90000&&!anim.vus[p.id]){ anim.vus[p.id]=1; anim.ambu={t:now}; } }
+    q.x+=(cib.x-q.x)*0.05; q.y+=(cib.y-q.y)*0.05;
+    x.fillStyle=C["--tri-"+p.tri]||C["--tri-vert"];
+    x.beginPath(); x.arc(q.x,q.y,p.etat==="soin"?4.5+Math.sin(now/300+p.id)*0.8:3.5,0,Math.PI*2);
+    if(p.etat==="soin"){ x.strokeStyle=x.fillStyle; x.lineWidth=2; x.stroke(); } else x.fill();
+    if(p.etat==="lit"){ x.strokeStyle=C["--faint"]; x.lineWidth=1; x.strokeRect(q.x-5,q.y-4,10,8); }
+  });
+  Object.keys(anim.pos).forEach(function(id){ if(!vivants[id]){ var q=anim.pos[id]; q.y+=2.5; q.x+=(G.porte.x-q.x)*0.05; if(q.y>G.H) delete anim.pos[id]; else { x.fillStyle=C["--faint"]; x.beginPath(); x.arc(q.x,q.y,3,0,Math.PI*2); x.fill(); } } });
+  // ambulance
+  if(anim.ambu){
+    var d=(now-anim.ambu.t)/2500, ax=-50+d*(G.porte.x+30);
+    if(d>1.4) anim.ambu=null;
+    else { ax=Math.min(ax,G.porte.x-20); x.fillStyle="#f4f6f8"; x.fillRect(ax,G.route-8,34,14); x.fillStyle=C["--bad"]; x.fillRect(ax+14,G.route-6,6,10); x.fillRect(ax+12,G.route-4,10,6); x.fillStyle=Math.floor(now/200)%2?"#3f8fe0":"#e5484d"; x.fillRect(ax+4,G.route-11,6,3); }
+  }
 }
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
@@ -2770,7 +2901,8 @@ function ecranReglages(){
       +'<div class="champ"><label for="f-logo">Lettres du logo (1 ou 2)</label><input type="text" id="f-logo" maxlength="2" autocomplete="off" value="'+h(U.logo!==undefined?U.logo:((S.perso&&S.perso.logo)||"H"))+'"></div>'
       +'<div class="actions"><button type="button" class="btn principal" data-a="perso">Enregistrer</button></div>'
       +'<div class="champ"><span>Couleur</span><div class="puces-choix">'+COULEURS.map(function(c){ return '<button type="button" class="choix'+((S.perso&&S.perso.couleur||"bleu")===c[0]?" actif":"")+'" data-a="couleur" data-k="'+c[0]+'"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:'+c[2]+';margin-right:6px;vertical-align:-1px"></span>'+c[1]+'</button>'; }).join("")+'</div></div></div>'
-    +revendreHtml()
+    +(S.campagne?"":revendreHtml())
+    +campagnesHtml()
     +'<div class="carte"><h2>Météo</h2><p class="aide">Le temps qu\'il fait vraiment dans votre ville change les maladies : verglas, chaleur, pluie, brouillard, grand froid.</p>'
       +(S.meteo&&S.meteo.ville?'<p>'+h(S.meteo.ville)+(S.meteo.cur?' · '+Math.round(S.meteo.cur.temp)+' °C, '+ciel(S.meteo.cur.code):"")+'</p>':"")
       +'<div class="champ"><label for="f-ville">'+(S.meteo&&S.meteo.ville?"Changer de ville":"Votre ville")+'</label><input type="text" id="f-ville" maxlength="40" autocomplete="off" value="'+h(U.ville||"")+'"></div>'
@@ -2841,6 +2973,17 @@ var A={
     else txt+=bon?" Le patient passe au service "+SERVICES[p.sv].nom+".":" Les soins seront plus longs et le patient repartira mécontent.";
     son(ok&&bon?"succes":ok||bon?"patient":"erreur");
     U.retour={c:ok&&bon?"ok":bon?"warn":"bad",m:txt}; U.ecran="patients"; U.dossier=null; U.choix=null; U.trait=null; return true;
+  },
+  planmode:function(d){ U.planMode=d.k; return false; },
+  campagne:function(d){
+    if(modeCampagne()) return false;
+    sauver(); if(nuage.ref) pousser(true);
+    try{ localStorage.setItem(CLE_MODE,d.k); localStorage.removeItem("myhospital-campagne"); }catch(e){ return false; }
+    setTimeout(function(){ location.reload(); },300); return false;
+  },
+  quittercamp:function(){
+    try{ localStorage.removeItem(CLE_MODE); }catch(e){}
+    sauver(); setTimeout(function(){ location.reload(); },200); return false;
   },
   vie:function(d){ return deciderVie(maintenant(),d.k); },
   question:function(d){
@@ -3185,6 +3328,7 @@ function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
   motsBelges(app);
+  if(U.ecran==="plan"&&(U.planMode||"anime")==="anime"&&!anim.id) anim.id=requestAnimationFrame(dessiner);
   if(cle!==dernier){ window.scrollTo(0,0); dernier=cle; } else window.scrollTo(0,y);
   sauver();
 }
@@ -3241,7 +3385,7 @@ function battement(retour){
   avant={t:S.horloge,soignes:S.soignes,caisse:S.caisse,rep:reputation()};
   paye=activite(ecoule);
   change=avancer(maintenant());
-  if(bonusQuotidien()) change=true;
+  if(!S.campagne&&bonusQuotidien()) change=true;
   majMeteo(false);
   if(retour) resumer(avant);
   if(change||paye){ marquer(); rendre(); } else if(retour) rendre(); else tic();
@@ -3332,7 +3476,7 @@ document.addEventListener("visibilitychange",function(){
 });
 
 function demarrer(donnees){
-  var repris=(donnees&&valide(donnees.S))?donnees.S:charger(), avant;
+  var camp=modeCampagne(), repris=camp?charger():(donnees&&valide(donnees.S))?donnees.S:charger(), avant, r;
   if(donnees&&donnees.U) U=donnees.U;
   if(!("retour" in U)){ U.dossier=null; U.choix=null; U.retour=null; }
   if(!("trait" in U)) U.trait=null;
@@ -3343,11 +3487,13 @@ function demarrer(donnees){
     S=repris; migrer();
     avant={t:S.horloge,soignes:S.soignes,caisse:S.caisse,rep:reputation()};
     if(S.fondeLe&&avancer(maintenant())){ marquer(); resumer(avant); }
-    if(bonusQuotidien()) marquer();
+    if(!camp&&bonusQuotidien()) marquer();
+    if(!camp){ try{ r=+localStorage.getItem(CLE_RECOMPENSE)||0; if(r&&S.fondeLe){ S.moi.argent+=r; S.moi.gagne=(S.moi.gagne||0)+r; noter(S.horloge,"ok","Récompense de campagne : "+mt(r)+" sur votre compte personnel."); localStorage.removeItem(CLE_RECOMPENSE); marquer(); } }catch(e){} }
   }
+  if(camp&&(!repris||!S.campagne)) creerScenario(camp);
   rendre();
   setInterval(battement,1000);
-  brancher();
+  if(!camp) brancher();
 }
 var chaud=window.claude&&window.claude.hot;
 if(chaud&&chaud.snapshot) chaud.snapshot(function(){ return {S:S,U:U}; });
