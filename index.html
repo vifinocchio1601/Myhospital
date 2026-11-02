@@ -458,6 +458,19 @@ var CAUSES=[["enfants","Les enfants malades"],["coeur","Le cœur et les soins in
 var DELAI_GALA=2, PAUSE_GALA=7;
 // Impôt des sociétés : 25 % du bénéfice de chaque mois, prélevé à la fin du mois. Pas d'impôt sur un mois en perte.
 var TAUX_IMPOT=0.25;
+// Investissements : des établissements achetés avec la caisse de l'hôpital, qui rapportent chaque nuit. Chacun s'agrandit sur trois niveaux.
+var FILIALES=[
+  ["pharmacie","Pharmacie en ville",50000,650,"Vend des médicaments au quartier."],
+  ["labo","Laboratoire d'analyses",80000,1000,"Analyse les prises de sang des médecins de la région."],
+  ["radio","Centre de radiologie",120000,1500,"Radios et scanners pour les patients de ville."],
+  ["repos","Maison de repos",150000,1850,"Héberge des personnes âgées, à l'année."],
+  ["clinique","Clinique privée",400000,5000,"Chirurgie esthétique et soins sans attente, pour une clientèle aisée."]];
+var FILIALE_MAX=3;
+// Classement national : publié le premier de chaque mois, il compare l'hôpital à dix-neuf autres
+var RIVAUX=["CHU de Valmont","Hôpital Saint-Aldric","Clinique Bellevue","Hôpital Sainte-Clotilde","Clinique des Tilleuls","Centre hospitalier du Lac","Hôpital Saint-Gérard","Polyclinique du Moulin","Hôpital de la Croix-Blanche","Clinique Sainte-Agathe","CHU Sainte-Rosalie","Hôpital des Glycines","Clinique du Val d'Or","Hôpital Saint-Benoît","Centre médical des Peupliers","Hôpital Saint-Félix","Clinique de l'Étang","Hôpital Saint-Rémi","CHU de Montclair"];
+var PRIMES_CLASSEMENT=[[1,30000],[3,15000],[10,5000]];
+// Journal télévisé : les événements marquants passent parfois à la télé, ce qui attire ou fait fuir des patients pendant deux jours
+var DUREE_TELE=2*JOUR, TELE_MAX=30;
 // Frais de structure : administration, informatique, assurances… Ils grandissent avec l'équipe, les lits et les services ouverts, et pèsent plus aux grands paliers.
 var STRUCT_PERSONNE=20, STRUCT_LIT=15, STRUCT_SERVICE=300, STRUCT_PALIER=[0.15,0.3,0.6,1,1.3];
 // Le calendrier réel : certaines périodes de l'année amènent leurs maladies (jour de début et de fin, au format mois-jour)
@@ -559,7 +572,7 @@ var TYPES_D=[["t","Impôt sur les bénéfices"],["s","Salaires"],["o","Cotisatio
 var PART_PATIENT=0.4, DELAI_MUTUELLE=[5,8], TAUX_CONTESTE=0.25, DELAI_RELANCE=5, LIMITE_CONTESTE=20, DECOUVERT_MAX=3000;
 // L'employeur paie 25 % de cotisations sur les salaires. Les achats durables sont amortis sur cinq ans.
 var TAUX_COTISATIONS=0.25, DUREE_AMORT=5*365;
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["greffe","Transplantation"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["structure","Frais de structure"],["impots","Impôt sur les bénéfices"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["greffe","Transplantation"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["structure","Frais de structure"],["filiales","Investissements"],["impots","Impôt sur les bénéfices"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"],deces:["Décédé","bad"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
@@ -593,7 +606,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,impots:1,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,impots:1,filiales:{},classement:null,tele:{liste:[],effet:null},crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -632,6 +645,11 @@ function migrer(){
     S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
   }
+  if(!S.tele){
+    S.filiales={}; S.tele={liste:[],effet:null}; S.classement=null;
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : investissements (pharmacie, maison de repos, clinique privée…), classement national des hôpitaux chaque mois, et le journal télévisé.");
+  }
+  if(S.fondeLe&&!S.classement) publierClassement(S.horloge||Date.now(),true);
   if(!S.impots){
     S.impots=1;
     if(S.fondeLe) noter(S.horloge||Date.now(),"warn","Nouveau : l'hôpital paie 25 % d'impôt sur le bénéfice de chaque mois, et des frais de structure (administration, informatique, assurances) qui grandissent avec sa taille. Voyez Finances.");
@@ -843,7 +861,7 @@ function tirerMaladie(liste,t){
 function saisonMaladie(k){ var l=[]; SAISONS.forEach(function(x,i){ if((MALADIES[k].saison===i)||(x.m[k]||1)>=1.5) l.push(x.nom.toLowerCase()); }); return l; }
 function forme(k){ return !!(S.moi.formations&&S.moi.formations[k]); }
 function bonusPlaque(){ var n=0; PLAQUES.forEach(function(x){ if(S.moi.dons>=x[0]) n=x[2]; }); return n; }
-function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1)*(1+0.08*niv("aile")); }
+function attendus(){ var T=S.tele&&S.tele.effet; return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1)*(1+0.08*niv("aile"))*(T&&T.fin>S.horloge?T.x:1); }
 function fraisStructure(){
   var sv=0, k, n;
   for(k in SERVICES) if(S.ouverts[k]&&SERVICES[k].cout) sv++;
@@ -1217,6 +1235,7 @@ function porterPlainte(p,t,chance,min,max,motif){
 }
 function deces(p,t,cause,faute){
   S.serie=0;
+  if(faute) reportage(t,0,"Décès suspect à "+S.nom+" : la famille de "+nomComplet(p)+" demande des comptes",0.5);
   var e=parId(S.equipe,p.soignant);
   if(e&&e.occupe===p.id) e.occupe=null;
   S.stat.deces=(S.stat.deces||0)+1; S.medical.deces++;
@@ -1238,7 +1257,7 @@ function finSoin(p,t){
   }
   facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
   p.paye+=prix; S.soignes++; S.stat.soignes++; S.serie=(S.serie||0)+1;
-  if(p.greffe){ S.greffe.faites=(S.greffe.faites||0)+1; avis(95); avis(95); noter(t,"ok","Greffe réussie pour "+nomComplet(p)+". La presse en parle."); }
+  if(p.greffe){ S.greffe.faites=(S.greffe.faites||0)+1; avis(95); avis(95); noter(t,"ok","Greffe réussie pour "+nomComplet(p)+". La presse en parle."); reportage(t,1,"Une greffe de "+ORGANES[p.mal.slice(7)]+" sauve "+nomComplet(p)+" à "+S.nom,0.8); }
   if(p.heli){ facturer(t,"r:"+p.sv,FORFAIT_HELICO,FORFAIT_HELICO); p.paye+=FORFAIT_HELICO; }
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
@@ -1398,6 +1417,46 @@ function deciderGreffon(t,oui){
   noter(t,"ok","Greffon de "+ORGANES[o.organe]+" accepté : "+nomComplet(p)+" doit être "+(p.femme?"opérée":"opéré")+" dans les six heures.");
   affecter(t); return true;
 }
+function revenuFiliale(f,n){ return f[3]*n*(1+0.1*(n-1)); }
+function revenusFiliales(tj){
+  var tot=0;
+  FILIALES.forEach(function(f){ var n=(S.filiales&&S.filiales[f[0]])||0; if(n) tot+=revenuFiliale(f,n)*alea(0.75,1.25); });
+  if(tot) inscrire(tj,"r:filiales",tot);
+}
+function scoreHopital(){
+  var sv=ORDRE_SERVICES.filter(function(k){ return S.ouverts[k]; }).length, l=S.avisPatients||[], am=l.length?l.reduce(function(n,a){ return n+a.e; },0)/l.length:3;
+  var dm=(S.medical?S.medical.deces:0)-((S.classement&&S.classement.deces)||0);
+  return Math.round(reputation()*0.45+Math.min(20,sv*1.5)+S.palier*4+Object.keys((S.recherche&&S.recherche.faits)||{}).length*2+(am-3)*5+Math.min(8,(S.greffe&&S.greffe.faites)||0)-Math.min(15,dm*1.5));
+}
+function publierClassement(t,premier){
+  var C=S.classement, l, moi, r, prime=0, ancien;
+  if(!C){ C=S.classement={rivaux:RIVAUX.map(function(n,i){ return {nom:n,score:Math.round(30+i*3.2+alea(-4,4))}; }),hist:[],deces:S.medical?S.medical.deces:0}; }
+  else C.rivaux.forEach(function(x){ x.score=borne(Math.round(x.score+alea(-5,5)),20,95); });
+  moi=scoreHopital();
+  l=C.rivaux.map(function(x){ return {nom:x.nom,score:x.score}; }); l.push({nom:S.nom,score:moi,moi:1});
+  l.sort(function(a,b){ return b.score-a.score; });
+  r=l.findIndex(function(x){ return x.moi; })+1; ancien=C.rang;
+  C.liste=l; C.rang=r; C.score=moi; C.t=t; C.deces=S.medical?S.medical.deces:0;
+  C.hist.push({t:t,r:r}); if(C.hist.length>12) C.hist.shift();
+  if(premier) return;
+  PRIMES_CLASSEMENT.some(function(x){ if(r<=x[0]){ prime=x[1]; return true; } return false; });
+  if(prime) inscrire(t,"r:divers",prime);
+  if(r<=3){ avis(92); avis(92); }
+  noter(t,r<=10?"ok":"","Classement national : "+S.nom+" est "+(r===1?"1er":r+"e")+" sur "+l.length+(ancien?" ("+(ancien>r?"+"+(ancien-r):ancien<r?"−"+(r-ancien):"=")+")":"")+"."+(prime?" Prime de "+mt(prime)+".":""));
+  notifier("Classement national",(r===1?"1er":r+"e")+" sur "+l.length+(prime?", prime de "+mt(prime):"")+".",t);
+  if(r===1) reportage(t,1,S.nom+" élu meilleur hôpital du pays");
+  else if(r<=3) reportage(t,1,S.nom+" sur le podium du classement national");
+  else if(ancien&&r-ancien>=5) reportage(t,0,"Classement des hôpitaux : "+S.nom+" dégringole");
+}
+// Un événement marquant a une chance de passer au journal télévisé
+function reportage(t,positif,titre,chance){
+  var T=S.tele;
+  if(!T||Math.random()>=(chance===undefined?0.6:chance)) return;
+  T.liste.unshift({t:t,p:positif?1:0,titre:titre}); if(T.liste.length>TELE_MAX) T.liste.length=TELE_MAX;
+  T.effet={fin:t+DUREE_TELE,x:positif?1.12:0.85};
+  noter(t,positif?"ok":"bad","Au journal télévisé : « "+titre+" ». "+(positif?"Plus de patients viendront ces deux prochains jours.":"Des patients éviteront l'hôpital ces deux prochains jours."));
+  notifier("Au journal télévisé",titre,t);
+}
 function impot(tj){
   var c=S.cm[cleMois(tj)]||{}, res=recettesDe(c)-depensesDe(c), m;
   if(c["t:impots"]) return;
@@ -1420,6 +1479,7 @@ function soireeGala(t){
   if(total) inscrire(t,"r:divers",total);
   F.total=(F.total||0)+total;
   if(venus){ avis(85); avis(85); }
+  if(total>=5000) reportage(t,1,"Le gala de "+S.nom+" récolte "+mt(total)+" pour ses patients",0.6);
   noter(t,total?"ok":"warn","Gala de la fondation : "+pl(venus,"invité présent","invités présents")+", "+mt(total)+" récoltés"+(top?". Plus gros don : "+top.nom+" ("+mt(top.don)+")":"")+".");
   notifier("Gala de la fondation",mt(total)+" récoltés.",t);
 }
@@ -1431,6 +1491,8 @@ function criteresMinistre(){
 function visiteMinistre(t){
   var c=criteresMinistre(), n=c.filter(function(x){ return x[1]; }).length, base=SUBVENTION_MINISTRE[S.palier]||SUBVENTION_MINISTRE[0], m=0, rate=c.filter(function(x){ return !x[1]; }).map(function(x){ return x[0].toLowerCase(); });
   S.ministre=null;
+  if(n===c.length) reportage(t,1,"Le ministre de la Santé cite "+S.nom+" en exemple",0.9);
+  if(n<3) reportage(t,0,"Visite du ministre : rapport accablant pour "+S.nom,0.9);
   if(n===c.length){ m=base; avis(95); avis(95); avis(95); noter(t,"ok","Visite du ministre : tout est impeccable. Il annonce une subvention de "+mt(m)+" et vante l'hôpital devant les caméras."); }
   else if(n>=5){ m=Math.round(base*n/c.length/100)*100; noter(t,"ok","Visite du ministre : bonne impression ("+n+" points sur "+c.length+"). Subvention de "+mt(m)+". À revoir : "+rate.join(", ")+"."); }
   else if(n>=3) noter(t,"warn","Visite du ministre : rapport mitigé ("+n+" points sur "+c.length+"), pas de subvention. En cause : "+rate.join(", ")+".");
@@ -1465,7 +1527,8 @@ function resoudreCrise(t,ch){
     for(i=0;i<n;i++) S.arrivees.push({t:t+Math.round(alea(2,60)*MIN),mal:tirer(l),ev:c[0]==="blanc"?2:1});
   } else if(c[0]==="attendre") S.panne=t+6*HEURE;
   if(c[0]==="vaccin"||c[0]==="blanc"){ avis(92); avis(92); avis(92); }
-  if(c[0]==="ailleurs"){ avis(25); avis(25); avis(25); }
+  if(c[0]==="ailleurs"){ avis(25); avis(25); avis(25); reportage(t,0,X.nom+" : "+S.nom+" renvoie des patients vers d'autres hôpitaux",0.7); }
+  if(c[0]==="blanc"||c[0]==="vaccin") reportage(t,1,X.nom+" : le personnel de "+S.nom+" salué pour sa mobilisation",0.7);
   S.arrivees.sort(function(a,b){ return a.t-b.t; });
   noter(t,c[0]==="ailleurs"?"warn":"ok",X.nom+" : "+(ch?"vous choisissez":"sans réponse de votre part, l'équipe choisit")+" « "+c[1].toLowerCase()+" »"+(c[2]?" ("+mt(c[2])+")":"")+".");
   affecter(t); verifierObjectifs(t);
@@ -1552,7 +1615,9 @@ function cloturer(t){
   S.equipe.forEach(function(e){ e.minutes=0; });
   garde=cleJour(t-JOURS_GARDES*JOUR);
   for(vieux in S.cj) if(vieux<garde) delete S.cj[vieux];
-  if(cleMois(tj)!==cleMois(t)) impot(tj);
+  revenusFiliales(tj);
+  if(S.portes&&S.stat.partis>=10) reportage(tj,0,"Des dizaines de patients repartent de "+S.nom+" sans avoir été soignés",0.5);
+  if(cleMois(tj)!==cleMois(t)){ impot(tj); if(S.portes) publierClassement(t); }
   monterPalier(t); verifierObjectifs(t);
   absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
@@ -1780,6 +1845,9 @@ function ecranAccueil(){
     +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
     +tuile("g3","calendrier","Agenda",pl(S.arrivees.filter(function(a){ return a.rdv&&a.t>maintenant(); }).length,"rendez-vous","rendez-vous")+" à venir","agenda")
     +tuile("g5","etoile","Avis",(S.avisPatients||[]).length?((S.avisPatients.reduce(function(n,a){ return n+a.e; },0)/S.avisPatients.length).toFixed(1).replace(".",",")+" / 5"):"Aucun avis","avispat")
+    +tuile("g6","finances","Investissements",FILIALES.filter(function(f){ return S.filiales&&S.filiales[f[0]]; }).length+" sur "+FILIALES.length+" achetés","groupe")
+    +tuile("g5","coupe","Classement",S.classement&&S.classement.rang?(S.classement.rang===1?"1er":S.classement.rang+"e")+" sur 20":"Le 1er du mois","classement")
+    +tuile("g3","journal","Journal télévisé",S.tele&&S.tele.liste.length?quandTxt(S.tele.liste[0].t):"Aucun reportage","tele")
     +tuile("g8","coeur","Fondation",S.fondation&&S.fondation.gala?"Gala "+(cleJour(S.fondation.gala.t)===cleJour(maintenant())?"ce soir":dateCourte(S.fondation.gala.t)):"Galas de charité","fondation")
     +tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs")
     +tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats")
@@ -2185,6 +2253,33 @@ function ecranFondation2(){
       return '<div class="carte"><div class="carte-haut"><h3>'+g[1]+'<small>Jusqu\'à '+g[3]+' invités · organisation '+mt(g[2])+'</small></h3><button type="button" class="btn principal petit" data-a="gala" data-k="'+g[0]+'"'+(U.cause&&S.caisse>=g[2]?"":" disabled")+'>Organiser</button></div></div>';
     }).join("")+(U.cause?"":'<p class="aide">Choisissez une cause pour pouvoir organiser la soirée.</p>')+'</div>';
 }
+function ecranGroupe(){
+  var tot=0;
+  FILIALES.forEach(function(f){ var n=(S.filiales&&S.filiales[f[0]])||0; if(n) tot+=revenuFiliale(f,n); });
+  return barre()+entete("Investissements",tot?"Environ "+mt(tot)+" de revenus par jour":"Faites travailler les bénéfices de l'hôpital")
+    +'<p class="aide">Achetés avec la caisse de l\'hôpital, ces établissements rapportent chaque nuit (un peu plus ou un peu moins selon les jours). L\'achat est amorti sur cinq ans, et les revenus comptent dans le bénéfice imposable. Chaque agrandissement coûte le prix de départ et augmente les revenus.</p>'
+    +FILIALES.map(function(f){
+      var n=(S.filiales&&S.filiales[f[0]])||0, prix=f[2], suite;
+      if(n>=FILIALE_MAX) suite='<p class="aide">Taille maximale atteinte.</p>';
+      else suite='<div class="actions"><button type="button" class="btn principal" data-a="investir" data-k="'+f[0]+'"'+(S.caisse>=prix?"":" disabled")+'>'+(n?"Agrandir":"Acheter")+' · '+mt(prix)+'</button>'+(S.caisse>=prix?"":'<span class="aide">Il manque '+mt(prix-S.caisse)+'.</span>')+'</div>';
+      return '<div class="carte"><div class="carte-haut"><h3>'+f[1]+'<small>'+f[4]+' '+(n?"Rapporte environ "+mt(revenuFiliale(f,n))+" par jour"+(n<FILIALE_MAX?", "+mt(revenuFiliale(f,n+1))+" après agrandissement":"")+".":"Environ "+mt(f[3])+" par jour.")+'</small></h3><span class="puce '+(n?"ok":"")+'">'+(n?"Niveau "+n+" / "+FILIALE_MAX:"Pas encore à vous")+'</span></div>'+suite+'</div>';
+    }).join("");
+}
+function ecranClassement(){
+  var C=S.classement;
+  if(!C||!C.liste) return barre()+entete("Classement","")+'<p class="vide">Le premier classement sera publié le premier du mois prochain.</p>';
+  return barre()+entete("Classement national",(C.rang===1?"1er":C.rang+"e")+" sur "+C.liste.length+" · publié "+dateLongue(C.t))
+    +'<p class="aide">Le classement est publié le premier de chaque mois. Il tient compte de la réputation, des services ouverts, du palier, de la recherche, des avis des patients et des greffes, et pénalise les décès du mois. Votre score actuel : '+scoreHopital()+'. Primes : '+mt(30000)+' pour la 1re place, '+mt(15000)+' pour le podium, '+mt(5000)+' pour le top 10.</p>'
+    +(C.hist.length>1?'<p class="aide">Vos derniers rangs : '+C.hist.map(function(x){ return x.r; }).join(" → ")+'</p>':"")
+    +'<ul class="liste">'+C.liste.map(function(x,i){ return '<li class="rang'+(x.moi?" moi":"")+'"><div><b>'+(i+1)+'. '+h(x.nom)+'</b>'+(x.moi?'<small>Votre hôpital</small>':"")+'</div><div class="droite"><span class="puce num">'+x.score+' pts</span></div></li>'; }).join("")+'</ul>';
+}
+function ecranTele(){
+  var T=S.tele, e=T&&T.effet&&T.effet.fin>maintenant()?T.effet:null;
+  return barre()+entete("Journal télévisé",T&&T.liste.length?pl(T.liste.length,"reportage","reportages"):"Pas encore de reportage")
+    +(e?'<div class="alertes"><div class="alerte '+(e.x>1?"ok":"bad")+'"><span>Effet du dernier reportage : '+(e.x>1?"+":"−")+Math.round(Math.abs(e.x-1)*100)+' % de patients encore <span data-reste="'+e.fin+'">'+resteTxt(e.fin)+'</span>.</span></div></div>':"")
+    +'<p class="aide">Greffes, crises, décès suspects, visite du ministre, galas, classement : les événements marquants passent parfois à la télé. Un bon reportage attire 12 % de patients en plus pendant deux jours ; un mauvais en fait fuir 15 %.</p>'
+    +(T&&T.liste.length?'<ul class="liste">'+T.liste.map(function(x){ return '<li class="rang"><div><b>« '+h(x.titre)+' »</b><small>'+quandTxt(x.t)+'</small></div><div class="droite"><span class="puce '+(x.p?"ok":"bad")+'">'+(x.p?"Positif":"Négatif")+'</span></div></li>'; }).join("")+'</ul>':'<p class="vide">Aucun reportage pour l\'instant.</p>');
+}
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
     +'<p class="aide">Aucun patient ne refuse votre prix. La mutuelle rembourse une somme fixe, 60 % du prix habituel ; le reste est payé par le patient. Mais un service cher se fait une réputation : il y vient peu à peu moins de monde. Un service bon marché en attire davantage.</p>'
@@ -2518,6 +2613,16 @@ var A={
     if(!c.invite&&n>=G.max) return false;
     c.invite=c.invite?0:1; return true;
   },
+  investir:function(d){
+    var f=FILIALES.filter(function(x){ return x[0]===d.k; })[0], t=maintenant(), n;
+    if(!f) return false;
+    if(!S.filiales) S.filiales={};
+    n=S.filiales[f[0]]||0;
+    if(n>=FILIALE_MAX||S.caisse<f[2]) return false;
+    S.filiales[f[0]]=n+1; immobiliser(t,"filiales",f[1]+(n?", agrandissement":""),f[2]);
+    noter(t,"ok",f[1]+" : "+(n?"agrandissement au niveau "+(n+1):"achat")+" ("+mt(f[2])+").");
+    return true;
+  },
   greffon:function(d){ return deciderGreffon(maintenant(),d.k==="1"); },
   finbonus:function(){ U.bonus=null; return false; },
   rdv:function(d){
@@ -2660,7 +2765,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,fondation:ecranFondation2,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,fondation:ecranFondation2,groupe:ecranGroupe,classement:ecranClassement,tele:ecranTele,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
