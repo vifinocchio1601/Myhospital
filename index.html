@@ -1038,6 +1038,39 @@ function planMetier(role){
     mieux.e.plan[mieux.j]=mieux.k; nb[mieux.e.id]++; cov[mieux.j+mieux.k]++; if(mieux.k==="N") nuits[mieux.e.id]++;
   }
 }
+// Planning d'un onglet entier : d'abord au moins une personne de l'onglet sur chaque matin, après-midi et nuit de la semaine
+// (les nuits de préférence aux métiers d'urgence et aux métiers les plus nombreux), puis le reste pour renforcer chaque métier.
+function planGroupe(roles){
+  var gens=S.equipe.filter(function(e){ return roles.indexOf(e.role)>=0; }), jour=gens.length&&deJour(gens[0]), postes=jour?["M"]:["M","A","N"];
+  var nb={}, nuits={}, covG={}, covR={}, combien={}, garde=0, phase, mieux, j;
+  if(!gens.length) return;
+  gens.forEach(function(e){ e.plan=["R","R","R","R","R","R","R"]; nb[e.id]=0; nuits[e.id]=0; combien[e.role]=(combien[e.role]||0)+1; });
+  function libreLe(e,j,k){
+    if(nb[e.id]>=5||e.plan[j]!=="R"||(k==="N"&&nuits[e.id]>=3)) return false;
+    if((k==="M"&&e.plan[(j+6)%7]==="N")||(k==="N"&&e.plan[(j+1)%7]==="M")) return false;
+    return true;
+  }
+  for(phase=1;phase<=2;phase++){
+    garde=0;
+    while(garde++<600){
+      mieux=null;
+      for(j=0;j<7;j++) postes.forEach(function(k,ik){
+        if(phase===1&&(covG[j+k]||0)>=1) return;
+        gens.forEach(function(e){
+          var sv=SERVICES[ROLES[e.role].service], urgent=sv&&sv.vital&&S.ouverts[ROLES[e.role].service], sc;
+          if(!libreLe(e,j,k)) return;
+          if(phase===1) sc=ik*100+(k==="N"?(urgent?0:20)-combien[e.role]*3:-combien[e.role])+nb[e.id]*2+j*0.01;
+          else sc=(covR[e.role+j+k]||0)*1000+(k==="N"&&!urgent?300:0)+nb[e.id]*10+ik+j*0.01;
+          if(!mieux||sc<mieux.sc) mieux={sc:sc,e:e,j:j,k:k};
+        });
+      });
+      if(!mieux) break;
+      mieux.e.plan[mieux.j]=mieux.k; nb[mieux.e.id]++; if(mieux.k==="N") nuits[mieux.e.id]++;
+      covG[mieux.j+mieux.k]=(covG[mieux.j+mieux.k]||0)+1; covR[mieux.e.role+mieux.j+mieux.k]=(covR[mieux.e.role+mieux.j+mieux.k]||0)+1;
+    }
+  }
+}
+function groupeDe(role){ return (GROUPES_PLANNING.filter(function(x){ return x[3].indexOf(role)>=0; })[0]||[0,0,0,[role]])[3]; }
 function qualite(e){
   var q=remplace(e)?QUALITE_INTERIM:(EXP[e.exp].qualite+0.04*e.na)*(0.85+0.3*moralDe(e)/100);
   if(e.role!=="chef"&&nb("chef")) q+=0.05;
@@ -2663,7 +2696,7 @@ var A={
     if(!c||(ROLES[r].unique&&nb(r))) return false;
     S.candidats[r].splice(S.candidats[r].indexOf(c),1);
     c={id:S.nEquipe++,prenom:c.prenom,nom:c.nom,femme:c.femme,age:c.age,role:r,exp:c.exp,interne:c.interne?1:0,atouts:c.atouts,na:c.na,depuis:t,occupe:null,minutes:0,soignes:0};
-    c.xp=c.interne?0:SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c); planMetier(r);
+    c.xp=c.interne?0:SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c); planGroupe(groupeDe(r));
     noter(t,"",nomComplet(c)+" rejoint l'équipe comme "+(c.femme?ROLES[r].f:ROLES[r].nom).toLowerCase()+".");
     if(!S.portes&&ROLES[r].service!=="admin"){ S.portes=true; noter(t,"ok","Le cabinet ouvre ses portes : les premiers patients peuvent venir."); }
     replanifier(t);
@@ -2711,7 +2744,7 @@ var A={
   },
   planauto:function(){
     var G=GROUPES_PLANNING.filter(function(x){ return x[0]===U.planVue; })[0]||GROUPES_PLANNING[0], t=maintenant();
-    G[3].forEach(planMetier); replanifier(t); affecter(t); return true;
+    planGroupe(G[3]); replanifier(t); affecter(t); return true;
   },
   plan:function(d){
     var e=parId(S.equipe,+d.k), j=+d.d, t=maintenant();
