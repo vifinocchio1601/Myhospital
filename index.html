@@ -1013,6 +1013,29 @@ function planAuto(e){
   }
   return plan;
 }
+// Répartit toute l'équipe d'un métier sur la semaine : cinq postes chacun, un par jour au plus, trois nuits au plus,
+// en remplissant d'abord les postes les moins couverts. Les nuits ne sont prévues que pour les services d'urgence ouverts.
+function planMetier(role){
+  var R=ROLES[role], sv=SERVICES[R.service], gens=S.equipe.filter(function(e){ return e.role===role; }), postes, cov={}, i, j, mieux, nb={}, nuits={}, garde=0;
+  if(!gens.length) return;
+  postes=deJour(gens[0])?["M"]:sv&&sv.vital&&S.ouverts[R.service]?["M","A","N"]:["M","A"];
+  gens.forEach(function(e){ e.plan=["R","R","R","R","R","R","R"]; nb[e.id]=0; nuits[e.id]=0; });
+  for(j=0;j<7;j++) postes.forEach(function(k){ cov[j+k]=0; });
+  while(garde++<500){
+    mieux=null;
+    for(j=0;j<7;j++) postes.forEach(function(k,ik){
+      gens.forEach(function(e){
+        var sc;
+        if(nb[e.id]>=5||e.plan[j]!=="R"||(k==="N"&&nuits[e.id]>=3)) return;
+        // Le poste le moins couvert d'abord, puis la personne la moins chargée, et chacun garde de préférence le même poste
+        sc=cov[j+k]*1000+nb[e.id]*10+(e.plan.indexOf(k)>=0?0:3)+ik+j*0.01;
+        if(!mieux||sc<mieux.sc) mieux={sc:sc,e:e,j:j,k:k};
+      });
+    });
+    if(!mieux) break;
+    mieux.e.plan[mieux.j]=mieux.k; nb[mieux.e.id]++; cov[mieux.j+mieux.k]++; if(mieux.k==="N") nuits[mieux.e.id]++;
+  }
+}
 function qualite(e){
   var q=remplace(e)?QUALITE_INTERIM:(EXP[e.exp].qualite+0.04*e.na)*(0.85+0.3*moralDe(e)/100);
   if(e.role!=="chef"&&nb("chef")) q+=0.05;
@@ -2158,7 +2181,8 @@ function ecranPlanning(){
     +'<div class="onglets">'+GROUPES_PLANNING.map(function(x){ var n=S.equipe.filter(function(e){ return x[3].indexOf(e.role)>=0; }).length; return '<button type="button" class="onglet'+(x[0]===G[0]?" actif":"")+'" data-a="planvue" data-k="'+x[0]+'">'+x[1]+(n?" ("+n+")":"")+'</button>'; }).join("")+'</div>'
     +'<div class="carte"><h2>'+G[2]+'</h2><div class="tableau"><table class="grille"><thead><tr><th></th>'+JOURS_COURTS.map(function(x,j){ return '<th class="'+(q.j===j?"ici":"")+'">'+x+'</th>'; }).join("")+'</tr></thead><tbody>'+grille+'</tbody></table></div>'
     +'<p class="aide">'+(G[0]==="autres"?"L'accueil et l'entretien travaillent en journée, sans service de nuit.":"Un poste sans personne ne ferme pas : un collègue d'un autre service dépanne, ou un médecin de garde, mais moins de patients viennent et les soins sont plus lents. La nuit, il en vient peu, sauf aux urgences.")+'</p></div>'
-    +(blocs?'<p class="aide">'+(G[0]==="autres"?"Touchez un jour pour passer de travail à repos. Au-delà de cinq jours par semaine, le moral baisse.":"Touchez un jour pour changer de poste : matin, après-midi, nuit, repos. Au-delà de cinq postes par semaine ou de trois nuits, le moral baisse. Une nuit est payée 25 % de plus.")+'</p>'+blocs
+    +(blocs?'<div class="actions"><button type="button" class="btn principal" data-a="planauto">'+I.calendrier+'Remplir automatiquement</button><span class="aide">Répartit toute l\'équipe de cet onglet pour couvrir chaque jour.</span></div>'
+    +'<p class="aide">'+(G[0]==="autres"?"Touchez un jour pour passer de travail à repos. Au-delà de cinq jours par semaine, le moral baisse.":"Touchez un jour pour changer de poste : matin, après-midi, nuit, repos. Au-delà de cinq postes par semaine ou de trois nuits, le moral baisse. Une nuit est payée 25 % de plus.")+'</p>'+blocs
       :'<p class="vide">Personne dans ce groupe pour le moment.</p><button type="button" class="btn principal large" data-a="aller" data-e="recrutement">'+I.recrut+'Recruter</button>');
 }
 function ecranRecrutement(){
@@ -2637,7 +2661,7 @@ var A={
     if(!c||(ROLES[r].unique&&nb(r))) return false;
     S.candidats[r].splice(S.candidats[r].indexOf(c),1);
     c={id:S.nEquipe++,prenom:c.prenom,nom:c.nom,femme:c.femme,age:c.age,role:r,exp:c.exp,interne:c.interne?1:0,atouts:c.atouts,na:c.na,depuis:t,occupe:null,minutes:0,soignes:0};
-    c.xp=c.interne?0:SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c);
+    c.xp=c.interne?0:SEUILS_XP[c.exp]; c.plan=planAuto(c); S.equipe.push(c); planMetier(r);
     noter(t,"",nomComplet(c)+" rejoint l'équipe comme "+(c.femme?ROLES[r].f:ROLES[r].nom).toLowerCase()+".");
     if(!S.portes&&ROLES[r].service!=="admin"){ S.portes=true; noter(t,"ok","Le cabinet ouvre ses portes : les premiers patients peuvent venir."); }
     replanifier(t);
@@ -2682,6 +2706,10 @@ var A={
     prix=prixStage(e); if(S.caisse<prix) return false;
     inscrire(t,"e:"+ROLES[e.role].service,prix); e.stage=t; gagnerXp(e,XP_STAGE,t);
     return true;
+  },
+  planauto:function(){
+    var G=GROUPES_PLANNING.filter(function(x){ return x[0]===U.planVue; })[0]||GROUPES_PLANNING[0], t=maintenant();
+    G[3].forEach(planMetier); replanifier(t); affecter(t); return true;
   },
   plan:function(d){
     var e=parId(S.equipe,+d.k), j=+d.d, t=maintenant();
