@@ -456,6 +456,10 @@ var TAUX_MINISTRE=0.12, SUBVENTION_MINISTRE=[3000,8000,15000,25000,40000];
 var GALAS=[["petit","Dîner de charité",2000,4],["moyen","Soirée de gala",6000,8],["grand","Grand bal de la fondation",15000,12]];
 var CAUSES=[["enfants","Les enfants malades"],["coeur","Le cœur et les soins intensifs"],["cancer","La lutte contre le cancer"],["recherche","La recherche médicale"],["equipement","De nouveaux équipements"],["urgences","Les urgences"]];
 var DELAI_GALA=2, PAUSE_GALA=7;
+// Impôt des sociétés : 25 % du bénéfice de chaque mois, prélevé à la fin du mois. Pas d'impôt sur un mois en perte.
+var TAUX_IMPOT=0.25;
+// Frais de structure : administration, informatique, assurances… Ils grandissent avec l'équipe, les lits et les services ouverts, et pèsent plus aux grands paliers.
+var STRUCT_PERSONNE=20, STRUCT_LIT=15, STRUCT_SERVICE=300, STRUCT_PALIER=[0.15,0.3,0.6,1,1.3];
 // Le calendrier réel : certaines périodes de l'année amènent leurs maladies (jour de début et de fin, au format mois-jour)
 var PERIODES=[
   ["0101","0102","Lendemain du réveillon","brûlures et chutes après les fêtes",{brulure:2.5,plaie:2,commotion:1.8,gastro:1.5}],
@@ -549,13 +553,13 @@ var EXP=[{nom:"Junior",paie:0.85,qualite:0.88,vitesse:1.15,age:[24,30]},{nom:"Co
 // La première lettre d'un poste dit ce qu'il est : r recette ; s f e i x o charges payées ; g a w charges sans sortie d'argent
 // (médicaments sortis du stock, amortissements, créances perdues) ; k achat d'immobilisation ou de stock ;
 // c facture envoyée à la mutuelle, d paiement reçu ; p prêt du directeur, q remboursement.
-var SENS={r:1,p:1,d:1,g:0,a:0,w:0}, TYPES_CHARGE="sfeixogaw";
-var TYPES_D=[["s","Salaires"],["o","Cotisations patronales"],["f","Fournitures médicales"],["g","Médicaments et produits consommés"],["e","Charges et entretien"],["a","Amortissements"],["i","Investissements passés en charge"],["x","Amendes, intérêts et indemnités"],["w","Créances perdues"]];
+var SENS={r:1,p:1,d:1,g:0,a:0,w:0}, TYPES_CHARGE="sfeixogawt";
+var TYPES_D=[["t","Impôt sur les bénéfices"],["s","Salaires"],["o","Cotisations patronales"],["f","Fournitures médicales"],["g","Médicaments et produits consommés"],["e","Charges et entretien"],["a","Amortissements"],["i","Investissements passés en charge"],["x","Amendes, intérêts et indemnités"],["w","Créances perdues"]];
 // La mutuelle : le patient paie sa part tout de suite, la mutuelle règle le reste par lots, 5 à 8 jours plus tard, et en conteste parfois une partie.
 var PART_PATIENT=0.4, DELAI_MUTUELLE=[5,8], TAUX_CONTESTE=0.25, DELAI_RELANCE=5, LIMITE_CONTESTE=20, DECOUVERT_MAX=3000;
 // L'employeur paie 25 % de cotisations sur les salaires. Les achats durables sont amortis sur cinq ans.
 var TAUX_COTISATIONS=0.25, DUREE_AMORT=5*365;
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["greffe","Transplantation"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["greffe","Transplantation"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["structure","Frais de structure"],["impots","Impôt sur les bénéfices"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"],deces:["Décédé","bad"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
@@ -589,7 +593,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,impots:1,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -627,6 +631,10 @@ function migrer(){
   if(!S.dossiers){
     S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
+  }
+  if(!S.impots){
+    S.impots=1;
+    if(S.fondeLe) noter(S.horloge||Date.now(),"warn","Nouveau : l'hôpital paie 25 % d'impôt sur le bénéfice de chaque mois, et des frais de structure (administration, informatique, assurances) qui grandissent avec sa taille. Voyez Finances.");
   }
   if(!S.fondation){
     S.fondation={gala:null,dernier:0,total:0,galas:0}; S.meteo=null;
@@ -836,6 +844,12 @@ function saisonMaladie(k){ var l=[]; SAISONS.forEach(function(x,i){ if((MALADIES
 function forme(k){ return !!(S.moi.formations&&S.moi.formations[k]); }
 function bonusPlaque(){ var n=0; PLAQUES.forEach(function(x){ if(S.moi.dons>=x[0]) n=x[2]; }); return n; }
 function attendus(){ return PALIERS[S.palier].base*(0.5+reputation()/100)*(forme("communicant")?1.1:1)*(1+0.08*niv("aile")); }
+function fraisStructure(){
+  var sv=0, k, n;
+  for(k in SERVICES) if(S.ouverts[k]&&SERVICES[k].cout) sv++;
+  n=(S.equipe.length*STRUCT_PERSONNE+(S.lits+(S.privees||0))*STRUCT_LIT+sv*STRUCT_SERVICE)*(STRUCT_PALIER[S.palier]||1)*(1+S.equipe.length/100);
+  return Math.round(n);
+}
 function chargesBatiment(){ return Math.round(PALIERS[S.palier].charges*(forme("gestionnaire")?0.85:1)); }
 function nb(role){ var n=0, i; for(i=0;i<S.equipe.length;i++) if(S.equipe[i].role===role) n++; return n; }
 function soignantsDe(sv){ var n=0; SERVICES[sv].roles.forEach(function(r){ n+=nb(r); }); return n; }
@@ -958,7 +972,7 @@ function paieDe(e){ return Math.round(S.postes[e.role].salaire*EXP[e.exp].paie*(
 function paiePoste(e,k){ return k==="R"?0:Math.round(paieDe(e)*(k==="N"?PRIME_NUIT:1)); }
 function masseJour(t){ var j=jourSemaine(t), n=0; S.equipe.forEach(function(e){ n+=paiePoste(e,e.plan[j]); }); return n; }
 function paieSemaine(e){ var n=0; e.plan.forEach(function(k){ n+=paiePoste(e,k); }); return n; }
-function chargesJour(){ var n=chargesBatiment()+S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0)+(S.ecole?ECOLE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
+function chargesJour(){ var n=chargesBatiment()+fraisStructure()+S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE+entretienMateriel()+PRIME_ASSURANCE[S.palier]+(S.recherche&&S.recherche.ouvert?RECHERCHE_ENTRETIEN:0)+(S.ecole?ECOLE_ENTRETIEN:0), k; for(k in SERVICES) if(S.ouverts[k]) n+=SERVICES[k].entretien; return n; }
 // La mutuelle rembourse une somme fixe : 60 % du prix habituel, jamais plus que le prix demandé.
 // Tout ce qui dépasse est un supplément, payé par le patient. C'est à ce qu'il paie de sa poche qu'il réagit.
 function partMutuelle(prix,ref){ return Math.min(Math.round(prix),Math.round(ref*(1-PART_PATIENT))); }
@@ -1384,6 +1398,14 @@ function deciderGreffon(t,oui){
   noter(t,"ok","Greffon de "+ORGANES[o.organe]+" accepté : "+nomComplet(p)+" doit être "+(p.femme?"opérée":"opéré")+" dans les six heures.");
   affecter(t); return true;
 }
+function impot(tj){
+  var c=S.cm[cleMois(tj)]||{}, res=recettesDe(c)-depensesDe(c), m;
+  if(c["t:impots"]) return;
+  if(res<=0){ noter(tj,"","Fin du mois : pas de bénéfice, donc pas d'impôt."); return; }
+  m=Math.round(res*TAUX_IMPOT);
+  inscrire(tj,"t:impots",m);
+  noter(tj,"warn","Impôt sur les bénéfices du mois : "+mt(m)+" (25 % de "+mt(res)+").");
+}
 function soireeGala(t){
   var F=S.fondation, G=F.gala, total=0, top=null, venus=0;
   F.gala=null; F.dernier=t; F.galas=(F.galas||0)+1;
@@ -1498,6 +1520,7 @@ function cloturer(t){
     if(k!=="R"&&!abs) gagnerXp(e,estSoignant(e)?XP_POSTE_SOIGNANT:XP_POSTE_AUTRE,tj);
   });
   inscrire(tj,"e:batiment",chargesBatiment());
+  inscrire(tj,"e:structure",fraisStructure());
   for(k in SERVICES) if(S.ouverts[k]) inscrire(tj,"e:"+k,SERVICES[k].entretien);
   inscrire(tj,"e:lits",S.lits*ENTRETIEN_LIT+(S.privees||0)*ENTRETIEN_PRIVEE);
   inscrire(tj,"e:materiel",entretienMateriel());
@@ -1529,6 +1552,7 @@ function cloturer(t){
   S.equipe.forEach(function(e){ e.minutes=0; });
   garde=cleJour(t-JOURS_GARDES*JOUR);
   for(vieux in S.cj) if(vieux<garde) delete S.cj[vieux];
+  if(cleMois(tj)!==cleMois(t)) impot(tj);
   monterPalier(t); verifierObjectifs(t);
   absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
