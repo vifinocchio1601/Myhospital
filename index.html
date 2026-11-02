@@ -148,6 +148,9 @@ h2{font-size:12.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercas
 svg.graphe text{stroke:none;font-family:var(--f-ui);font-variant-numeric:tabular-nums}
 svg.graphe{width:100%;height:auto}
 .etoiles{color:var(--warn);letter-spacing:1px;white-space:nowrap}
+.serie{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.jour-serie{text-align:center;padding:6px 0;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--faint);font-weight:700;font-size:13px}
+.jour-serie.fait{background:var(--ok-bg);color:var(--ok);border-color:transparent}
 .carte.crise{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .vide{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:18px;color:var(--muted)}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
@@ -302,11 +305,12 @@ var SERVICES={
   dentaire:{nom:"Dentisterie",acte:"Soin dentaire",palier:2,cout:6000,entretien:80,roles:["dentiste"],duree:30,prix:120,pas:5,patience:90,poids:10,ic:"dent",g:"g2"},
   cardio:{nom:"Cardiologie",acte:"Consultation de cardiologie",palier:3,cout:15000,entretien:400,roles:["cardiologue"],duree:40,prix:250,pas:10,patience:120,poids:8,ic:"pouls",g:"g3"},
   psy:{nom:"Psychiatrie",acte:"Consultation de psychiatrie",palier:3,cout:4000,entretien:60,roles:["psychiatre"],duree:45,prix:90,pas:5,patience:120,poids:8,ic:"cerveau",g:"g4"},
+  greffe:{nom:"Transplantation",acte:"Greffe d'organe",palier:3,cout:30000,entretien:1500,roles:["transplanteur"],duree:180,prix:15000,pas:500,patience:360,poids:0,sejour:[5,8],ic:"coeur",g:"g8"},
   onco:{nom:"Oncologie",acte:"Cure de chimiothérapie",palier:4,cout:40000,entretien:2500,roles:["oncologue"],duree:90,prix:5000,pas:100,patience:240,poids:1.5,sejour:[1,3],ic:"ruban",g:"g5"}
 };
 // Le diagnostic : chaque patient arrive avec quelques symptômes. Le directeur fait des tests puis désigne la maladie.
 // Sans réponse au bout de DELAI_DIAG, un médecin de l'équipe prend le relais.
-var DELAI_DIAG=15*MIN, MEDECINS=["generaliste","chef","urgentiste","chirurgien","pediatre","reanimateur","cardiologue","psychiatre","oncologue"];
+var DELAI_DIAG=15*MIN, MEDECINS=["generaliste","chef","urgentiste","chirurgien","pediatre","reanimateur","cardiologue","psychiatre","oncologue","transplanteur"];
 var SYMPTOMES={fievre:"Fièvre",toux:"Toux",courbatures:"Courbatures",fatigue:"Fatigue",gorge:"Mal de gorge",nez:"Nez qui coule",ventre:"Maux de ventre",nausees:"Nausées",diarrhee:"Diarrhée",
   urines:"Brûlures en urinant",tete:"Maux de tête",lumiere:"Gêne à la lumière",vertiges:"Vertiges",soif:"Soif intense",pipi:"Envies fréquentes d'uriner",paleur:"Pâleur",souffle:"Essoufflement",
   dos:"Mal de dos",raideur:"Raideur",eternue:"Éternuements",yeux:"Yeux rouges",plaie:"Plaie qui saigne",douleur:"Douleur locale",rougeur:"Rougeur",brulure:"Brûlure",cheville:"Douleur à la cheville",
@@ -380,6 +384,9 @@ var MALADIES={
   sagesse:{nom:"Dent de sagesse incluse",sv:"dentaire",tri:"vert",s:["machoire","dent","gonflement"],t:{examen:"!Gencive gonflée au fond de la bouche.",radio:"!Dent de sagesse coincée dans l'os."}},
   cancerpoumon:{nom:"Cancer du poumon",sv:"onco",tri:"jaune",s:["toux","souffle","amaigri","fatigue"],t:{examen:"!Amaigrissement net.",radio:"!Masse dans le poumon.",scanner:"!Tumeur de 4 cm.",sang:"Bilan sanguin un peu perturbé."}},
   leucemie:{nom:"Leucémie",sv:"onco",tri:"orange",sejour:[3,5],s:["fatigue","paleur","bleus","fievre"],t:{examen:"!Pâleur, bleus sur les bras.",sang:"!Globules blancs anormaux en très grand nombre."}},
+  greffe_rein:{nom:"Greffe de rein",sv:"greffe",tri:"orange",nodiag:1,s:["fatigue"],t:{}},
+  greffe_foie:{nom:"Greffe de foie",sv:"greffe",tri:"orange",nodiag:1,p:1.3,s:["fatigue"],t:{}},
+  greffe_coeur:{nom:"Greffe de cœur",sv:"greffe",tri:"rouge",nodiag:1,p:1.6,d:1.3,s:["souffle"],t:{}},
   cancersein:{nom:"Cancer du sein",sv:"onco",tri:"jaune",femme:true,s:["boule","fatigue","amaigri"],t:{examen:"!Boule dure dans le sein.",echo:"!Masse suspecte.",irm:"!Tumeur confirmée."}}
 };
 // La pharmacie : chaque maladie a son traitement, pris dans le stock au début des soins et facturé au patient avec une marge.
@@ -388,14 +395,14 @@ var PRODUITS={
   antimigraineux:{nom:"Antimigraineux",cout:6},antihypertenseur:{nom:"Antihypertenseurs",cout:5},antidiabetique:{nom:"Antidiabétiques",cout:7},fer:{nom:"Fer",cout:3},
   antiinflammatoire:{nom:"Anti-inflammatoires",cout:3},antihistaminique:{nom:"Antihistaminiques",cout:3},pansement:{nom:"Pansements et sutures",cout:2},platre:{nom:"Plâtres et attelles",cout:12},
   anxiolytique:{nom:"Calmants",cout:4},anticoagulant:{nom:"Anticoagulants",cout:30},bloc:{nom:"Matériel de bloc opératoire",cout:300},accouchement:{nom:"Kits d'accouchement",cout:200},
-  betabloquant:{nom:"Bêtabloquants",cout:6},diuretique:{nom:"Diurétiques",cout:4},antidepresseur:{nom:"Antidépresseurs",cout:8},dentaire:{nom:"Matériel dentaire",cout:15},chimio:{nom:"Chimiothérapie",cout:1200}};
+  betabloquant:{nom:"Bêtabloquants",cout:6},diuretique:{nom:"Diurétiques",cout:4},antidepresseur:{nom:"Antidépresseurs",cout:8},dentaire:{nom:"Matériel dentaire",cout:15},chimio:{nom:"Chimiothérapie",cout:1200},greffon:{nom:"Conservation des greffons",cout:1500}};
 var TRAITEMENTS={grippe:"antidouleur",angine:"antibiotique",rhume:"antidouleur",bronchite:"inhalateur",gastro:"rehydratation",cystite:"antibiotique",migraine:"antimigraineux",hypertension:"antihypertenseur",
   diabete:"antidiabetique",anemie:"fer",lumbago:"antiinflammatoire",allergie:"antihistaminique",plaie:"pansement",brulure:"pansement",entorse:"platre",piqure:"antihistaminique",
   fracture:"platre",angoisse:"anxiolytique",chaleur:"rehydratation",pneumonie:"antibiotique",commotion:"repos",colique:"antiinflammatoire",asthme:"inhalateur",
   appendicite:"bloc",vesicule:"bloc",hernie:"bloc",femur:"bloc",accouchement:"accouchement",fauxtravail:"repos",preeclampsie:"antihypertenseur",
   otite:"antibiotique",varicelle:"antihistaminique",rougeole:"antidouleur",scarlatine:"antibiotique",bronchiolite:"inhalateur",
   infarctus:"anticoagulant",embolie:"anticoagulant",avc:"anticoagulant",septicemie:"antibiotique",meningite:"antibiotique",
-  angor:"betabloquant",insuffisance:"diuretique",arythmie:"anticoagulant",depression:"antidepresseur",anxiete:"anxiolytique",burnout:"repos",carie:"dentaire",abces:"antibiotique",sagesse:"dentaire",cancerpoumon:"chimio",leucemie:"chimio",cancersein:"chimio"};
+  angor:"betabloquant",insuffisance:"diuretique",arythmie:"anticoagulant",depression:"antidepresseur",anxiete:"anxiolytique",burnout:"repos",carie:"dentaire",abces:"antibiotique",sagesse:"dentaire",cancerpoumon:"chimio",leucemie:"chimio",cancersein:"chimio",greffe_rein:"greffon",greffe_foie:"greffon",greffe_coeur:"greffon"};
 Object.keys(MALADIES).forEach(function(k){ MALADIES[k].tr=TRAITEMENTS[k]||"repos"; });
 var STOCK_DEPART=8, LOT=10, GROS_LOT=50, REMISE_GROS=0.85, SURCOUT_AUTO=1.15, SEUIL_STOCK=3, DELAI_LIVRAISON=30*MIN, MARGE_HABITUELLE=30;
 // L'argent personnel du directeur : formations, placement en bourse, prêt à l'hôpital, dons et vie personnelle
@@ -438,6 +445,13 @@ var RDV_SERVICES=[["consult",20],["dentaire",20],["pediatrie",20],["cardio",12],
 // École d'internes : des soignants en formation, payés moitié prix, qui progressent deux fois plus vite mais travaillent moins bien sans encadrement
 var ECOLE_COUT=20000, ECOLE_ENTRETIEN=200, ECOLE_PALIER=2, PAIE_INTERNE=0.5, FIN_INTERNAT=30, NB_INTERNES=2;
 var AVIS_PATIENTS_MAX=40, CLE_NOTIF="myhospital-notifications";
+// Greffes : une liste d'attente qui se remplit chaque jour ; un greffon arrive à l'improviste, il faut l'accepter en deux heures et opérer dans les six heures
+var GREFFE_LISTE_MAX=12, DELAI_OFFRE=2*HEURE, DELAI_GREFFE=6*HEURE, TAUX_GREFFON=0.5;
+var ORGANES={rein:"rein",foie:"foie",coeur:"cœur"};
+// Récompense quotidienne : chaque jour où le jeu est ouvert, une prime pour l'hôpital, plus grosse jour après jour (jusqu'à 7 jours d'affilée)
+var BONUS_JOUR=250, SERIE_MAX=7;
+// Visite du ministre : annoncée trois jours à l'avance, à 10 h ; sept critères vérifiés sur place
+var TAUX_MINISTRE=0.12, SUBVENTION_MINISTRE=[3000,8000,15000,25000,40000];
 var CRISES={
   epidemie:{nom:"Épidémie de grippe",txt:"Une épidémie de grippe frappe la ville. Une vingtaine de malades vont arriver en consultation dans les heures qui viennent.",
     choix:[["vaccin","Campagne de vaccination gratuite",3000,"Deux fois moins de malades, et la ville vous en est reconnaissante."],["tous","Accueillir tout le monde",0,"Vingt patients de plus : beaucoup de travail et de recettes."],["ailleurs","Les envoyer ailleurs",0,"Aucun patient de plus, mais votre réputation en souffre."]]},
@@ -460,7 +474,7 @@ var NIVEAU_MAX=3, COUT_NIVEAU=[1,2,4], PART_ENTRETIEN=0.01;
 var SEUILS_XP=[0,60,250], XP_STAGE=50, XP_POSTE_SOIGNANT=1, XP_POSTE_AUTRE=4;
 // Le planning se lit par groupe de métiers
 var GROUPES_PLANNING=[
-  ["medecins","Médecins","Médecins prévus",["generaliste","chef","urgentiste","radiologue","chirurgien","pediatre","reanimateur","dentiste","cardiologue","psychiatre","oncologue"]],
+  ["medecins","Médecins","Médecins prévus",["generaliste","chef","urgentiste","radiologue","chirurgien","pediatre","reanimateur","dentiste","cardiologue","psychiatre","transplanteur","oncologue"]],
   ["infirmiers","Infirmiers","Infirmiers prévus",["infirmier","sagefemme"]],
   ["autres","Autres","Accueil et entretien prévus",["secretaire","agent"]]];
 // Absences : chaque nuit, une personne peut tomber malade (1 à 3 jours) ou demander un congé (2 à 5 jours, dans 3 jours).
@@ -482,7 +496,7 @@ var SAISONS=[
 var BAREME=2, ANCIENS_PRIX={chirurgie:400,maternite:300,rea:600,lit:80}, ANCIENS_SALAIRES={chirurgien:260,sagefemme:110,reanimateur:280};
 var NB_MALADIES={};
 Object.keys(MALADIES).forEach(function(k){ var sv=MALADIES[k].sv; if(MALADIES[k].saison===undefined) NB_MALADIES[sv]=(NB_MALADIES[sv]||0)+1; });
-var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","dentaire","pediatrie","rea","cardio","psy","onco"];
+var ORDRE_SERVICES=["consult","soins","urgences","imagerie","chirurgie","maternite","dentaire","pediatrie","rea","cardio","psy","greffe","onco"];
 // Les métiers : salaire habituel par jour (pour 8 heures), service de rattachement, atouts utiles au poste
 var ROLES={
   generaliste:{nom:"Médecin généraliste",f:"Médecin généraliste",pluriel:"Médecins généralistes",salaire:120,service:"consult",palier:0,atouts:["instruit","contact"]},
@@ -499,6 +513,7 @@ var ROLES={
   dentiste:{nom:"Dentiste",f:"Dentiste",pluriel:"Dentistes",salaire:200,service:"dentaire",palier:2,atouts:["mains","contact"]},
   cardiologue:{nom:"Cardiologue",f:"Cardiologue",pluriel:"Cardiologues",salaire:400,service:"cardio",palier:3,atouts:["instruit","sangfroid"]},
   psychiatre:{nom:"Psychiatre",f:"Psychiatre",pluriel:"Psychiatres",salaire:160,service:"psy",palier:3,atouts:["patient","contact"]},
+  transplanteur:{nom:"Chirurgien transplanteur",f:"Chirurgienne transplanteuse",pluriel:"Chirurgiens transplanteurs",salaire:650,service:"greffe",palier:3,atouts:["mains","sangfroid"]},
   oncologue:{nom:"Oncologue",f:"Oncologue",pluriel:"Oncologues",salaire:600,service:"onco",palier:4,atouts:["instruit","patient"]}
 };
 // Le planning : trois postes de 8 heures. Chaque personne a une semaine type, un poste ou un repos par jour.
@@ -507,7 +522,7 @@ var ROLES_JOUR=["secretaire","agent"], QUALITE_GARDE=0.8, LENT_AUTRE=1.5, LENT_G
 function deJour(e){ return ROLES_JOUR.indexOf(e.role)>=0; }
 var CYCLE_POSTES={M:"A",A:"N",N:"R",R:"M"}, FENETRES=[["M",6.5,14],["A",14,22],["N",22,30]], PRIME_NUIT=1.25;
 var JOURS_COURTS=["Lu","Ma","Me","Je","Ve","Sa","Di"], JOURS_NOMS=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
-var ORDRE_ROLES=["generaliste","chef","infirmier","secretaire","agent","urgentiste","radiologue","chirurgien","sagefemme","dentiste","pediatre","reanimateur","cardiologue","psychiatre","oncologue"];
+var ORDRE_ROLES=["generaliste","chef","infirmier","secretaire","agent","urgentiste","radiologue","chirurgien","sagefemme","dentiste","pediatre","reanimateur","cardiologue","psychiatre","transplanteur","oncologue"];
 var ATOUTS={instruit:"Instruit",contact:"Sens du contact",patient:"Patient",sangfroid:"Sang-froid",endurant:"Endurant",rigoureux:"Rigoureux",mains:"Habile de ses mains",chiffres:"Bon avec les chiffres"};
 // L'expérience : un junior coûte moins cher, un senior soigne plus vite et mieux
 var EXP=[{nom:"Junior",paie:0.85,qualite:0.88,vitesse:1.15,age:[24,30]},{nom:"Confirmé",f:"Confirmée",paie:1,qualite:1,vitesse:1,age:[30,45]},{nom:"Senior",paie:1.2,qualite:1.12,vitesse:0.85,age:[45,62]}];
@@ -521,7 +536,7 @@ var TYPES_D=[["s","Salaires"],["o","Cotisations patronales"],["f","Fournitures m
 var PART_PATIENT=0.4, DELAI_MUTUELLE=[5,8], TAUX_CONTESTE=0.25, DELAI_RELANCE=5, LIMITE_CONTESTE=20, DECOUVERT_MAX=3000;
 // L'employeur paie 25 % de cotisations sur les salaires. Les achats durables sont amortis sur cinq ans.
 var TAUX_COTISATIONS=0.25, DUREE_AMORT=5*365;
-var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
+var COMPTES_SERVICES=[["consult","Consultations"],["soins","Soins infirmiers"],["urgences","Urgences"],["imagerie","Imagerie"],["chirurgie","Chirurgie"],["maternite","Maternité"],["pediatrie","Pédiatrie"],["rea","Soins intensifs"],["dentaire","Dentisterie"],["cardio","Cardiologie"],["psy","Psychiatrie"],["greffe","Transplantation"],["onco","Oncologie"],["lits","Hospitalisation"],["pharma","Pharmacie"],["mutuelle","Mutuelles"],["materiel","Matériel"],["annexes","Parking et cafétéria"],["recherche","Recherche"],["admin","Accueil et entretien"],["direction","Direction"],["batiment","Bâtiment"],["plaintes","Assurance, indemnités et justice"],["pret","Intérêts versés au directeur"],["divers","Subventions, dons et divers"]];
 var ISSUES={soigne:["Soigné","ok"],sorti:["Sorti après séjour","ok"],parti:["Reparti sans soins","bad"],transfert:["Envoyé ailleurs","warn"],renonce:["A renoncé (prix)","warn"],deces:["Décédé","bad"]};
 var PRENOMS_F=["Élise","Noor","Camille","Inès","Solange","Ludmila","Odette","Jeanne","Maëlle","Clémence","Yasmine","Agathe","Margaux","Salomé","Apolline","Hortense","Lucie","Nadia","Roxane","Zélie","Bérénice","Colette","Fanny","Garance","Ilona","Justine","Karima","Léonie","Mathilde","Ophélie"];
 var PRENOMS_M=["Bastien","Théo","Gaspard","Honoré","Victor","Marius","Armand","Cédric","Lucien","Octave","Rémi","Samir","Tristan","Ulysse","Valentin","Yanis","Achille","Baptiste","Corentin","Damien","Émile","Félix","Gabin","Hugo","Ismaël","Joachim","Karim","Léandre","Maxence","Noé"];
@@ -555,7 +570,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -594,6 +609,12 @@ function migrer(){
     S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
   }
+  if(!S.greffe){
+    S.greffe={liste:[],offre:null,faites:0}; S.connexion={j:"",serie:0}; S.ministre=null;
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : service de transplantation (palier CHU), prime de connexion chaque jour et visites du ministre de la Santé.");
+  }
+  if(S.postes) Object.keys(ROLES).forEach(function(k){ if(!S.postes[k]) S.postes[k]={salaire:ROLES[k].salaire,heures:8}; });
+  if(S.tarifs) Object.keys(SERVICES).forEach(function(k){ if(S.tarifs[k]===undefined) S.tarifs[k]=SERVICES[k].prix; });
   if(S.tarifs&&S.tarifs.privee===undefined) S.tarifs.privee=REF_PRIVEE;
   if(S.bareme!==BAREME){
     Object.keys(ANCIENS_PRIX).forEach(function(k){ var neuf=k==="lit"?REF_LIT:SERVICES[k].prix; if(S.tarifs[k]!==undefined) S.tarifs[k]=Math.round(S.tarifs[k]/ANCIENS_PRIX[k]*neuf/10)*10; });
@@ -949,8 +970,8 @@ function creerPatient(t,force){
   function poids(x){ return SERVICES[MALADIES[x].sv].poids/NB_MALADIES[MALADIES[x].sv]*poidsSaison(x,t); }
   if(!k){
     // Un patient qu'on fait entrer vient d'abord pour un service ouvert qui a quelqu'un en poste
-    cles=Object.keys(MALADIES).filter(function(x){ var v=MALADIES[x].sv; return SERVICES[v].palier<=S.palier&&S.ouverts[v]&&S.equipe.some(function(e){ return SERVICES[v].roles.indexOf(e.role)>=0&&enPoste(e,t); }); });
-    if(!cles.length) cles=Object.keys(MALADIES).filter(function(x){ return SERVICES[MALADIES[x].sv].palier<=S.palier; });
+    cles=Object.keys(MALADIES).filter(function(x){ var v=MALADIES[x].sv; return !MALADIES[x].nodiag&&SERVICES[v].palier<=S.palier&&S.ouverts[v]&&S.equipe.some(function(e){ return SERVICES[v].roles.indexOf(e.role)>=0&&enPoste(e,t); }); });
+    if(!cles.length) cles=Object.keys(MALADIES).filter(function(x){ return !MALADIES[x].nodiag&&SERVICES[MALADIES[x].sv].palier<=S.palier; });
     cles.forEach(function(x){ total+=poids(x); });
     r=Math.random()*total;
     for(i=0;i<cles.length;i++){ r-=poids(cles[i]); if(r<=0){ k=cles[i]; break; } }
@@ -1061,7 +1082,7 @@ function differentiel(p){
   var enfant=!!SERVICES[p.sv].enfant, ctx=MALADIES[p.mal].c||"", l=[];
   Object.keys(MALADIES).forEach(function(k){
     var m=MALADIES[k], sv=SERVICES[m.sv], n=0;
-    if(sv.palier>S.palier||!!sv.enfant!==enfant||(m.c&&m.c!==ctx)) return;
+    if(m.nodiag||sv.palier>S.palier||!!sv.enfant!==enfant||(m.c&&m.c!==ctx)) return;
     m.s.forEach(function(x){ if(p.symptomes.indexOf(x)>=0) n++; });
     if(n||k===p.mal) l.push({k:k,n:n});
   });
@@ -1075,6 +1096,7 @@ function affecter(t){
   var file=enAttente().sort(function(a,b){ return TRI[a.tri][2]-TRI[b.tri][2]||a.arrive-b.arrive; }), pris=false;
   file.forEach(function(p){
     var sv=SERVICES[p.sv], dispo=S.equipe.filter(function(e){ return sv.roles.indexOf(e.role)>=0&&libre(e); }), e=null, d, lent=1;
+    if(!dispo.length&&p.sv==="greffe") return;
     if(!dispo.length){
       // Personne du service en poste : un autre soignant dépanne, sinon le médecin de garde, plus lentement
       if(S.equipe.some(function(x){ return sv.roles.indexOf(x.role)>=0&&enPoste(x); })) return;
@@ -1165,6 +1187,7 @@ function finSoin(p,t){
   }
   facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
   p.paye+=prix; S.soignes++; S.stat.soignes++; S.serie=(S.serie||0)+1;
+  if(p.greffe){ S.greffe.faites=(S.greffe.faites||0)+1; avis(95); avis(95); noter(t,"ok","Greffe réussie pour "+nomComplet(p)+". La presse en parle."); }
   if(p.heli){ facturer(t,"r:"+p.sv,FORFAIT_HELICO,FORFAIT_HELICO); p.paye+=FORFAIT_HELICO; }
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
@@ -1183,6 +1206,7 @@ function sortir(p,t){
 function partir(p,t){
   // Un cas vital que personne n'a pris en charge à temps peut mourir
   if(p.tri==="rouge"&&MORTELLES.indexOf(p.mal)>=0&&Math.random()<(fait("thrombolyse")?0.25:0.5)){ deces(p,t,"faute de prise en charge à temps",true); return; }
+  if(p.sv==="greffe") noter(t,"bad","Le greffon destiné à "+nomComplet(p)+" est perdu : aucun chirurgien transplanteur n'a pu opérer à temps.");
   S.stat.partis++;
   if(p.etat==="diag") S.stat.sansDiag++; else S.stat.sansSoin[p.sv]=(S.stat.sansSoin[p.sv]||0)+1;
   avis(10); if(Math.random()<0.5) laisserAvis(p,t,10,"parti"); ranger(p,t,"parti");
@@ -1293,6 +1317,50 @@ function declencher(t){
     inscrire(t,"e:imagerie",250); noter(t,"warn","Panne de l'appareil de radiologie : la réparation coûte "+mt(250)+".");
   }
   S.arrivees.sort(function(a,b){ return a.t-b.t; });
+}
+function inscrireReceveurs(t){
+  var G=S.greffe, n=entre(0,2), i, x, o;
+  for(i=0;i<n&&G.liste.length<GREFFE_LISTE_MAX;i++){
+    o=tirer(["rein","rein","rein","foie","foie","coeur"]); x=identite(Math.random()<0.5);
+    x.age=entre(18,70); x.organe=o; x.depuis=t; G.liste.push(x);
+  }
+}
+function offrirGreffon(t){
+  var G=S.greffe, x;
+  if(!G||!S.ouverts.greffe||!G.liste.length||G.offre) return;
+  x=tirer(G.liste);
+  G.offre={qui:G.liste.indexOf(x),organe:x.organe,t:t,limite:t+DELAI_OFFRE};
+  noter(t,"warn","Un greffon de "+ORGANES[x.organe]+" est disponible pour "+nomComplet(x)+". Deux heures pour l'accepter, depuis l'accueil.");
+  notifier("Greffon de "+ORGANES[x.organe]+" disponible","Deux heures pour l'accepter. Ouvrez l'accueil de l'hôpital.",t);
+}
+function deciderGreffon(t,oui){
+  var G=S.greffe, o=G&&G.offre, x, p;
+  if(!o) return false;
+  G.offre=null; x=G.liste[o.qui];
+  if(oui===null){ avis(30); noter(t,"warn","Le greffon de "+ORGANES[o.organe]+" part vers un autre hôpital : personne n'a répondu à temps."); return true; }
+  if(!oui||!x){ noter(t,"","Vous refusez le greffon de "+ORGANES[o.organe]+" : il part vers un autre hôpital."); return true; }
+  G.liste.splice(o.qui,1);
+  p=creerPatient(t,"greffe_"+o.organe);
+  p.prenom=x.prenom; p.nom=x.nom; p.femme=x.femme; p.age=x.age;
+  accueillir(p,t);
+  p.etat="attente"; p.diag="ok"; p.parMoi=false; p.auto=0; p.trait="greffon"; p.traitOk=true; p.limite=t+DELAI_GREFFE; p.pire=0; p.greffe=1;
+  noter(t,"ok","Greffon de "+ORGANES[o.organe]+" accepté : "+nomComplet(p)+" doit être "+(p.femme?"opérée":"opéré")+" dans les six heures.");
+  affecter(t); return true;
+}
+function criteresMinistre(){
+  return [["Locaux propres",couvProprete()>=1],["Accueil assuré",couvAccueil()>=1],["Au moins deux soignants en poste",enPosteMaintenant()>=2],
+    ["Pas plus de cinq patients qui attendent",aDiagnostiquer().length+enAttente().length<=5],["Aucun médicament en rupture",produitsConnus().every(function(k){ return stockDe(k)>0; })],
+    ["Réputation d'au moins 70",reputation()>=70],["Assez d'infirmiers pour les patients alités",couvLits()>=1]];
+}
+function visiteMinistre(t){
+  var c=criteresMinistre(), n=c.filter(function(x){ return x[1]; }).length, base=SUBVENTION_MINISTRE[S.palier]||SUBVENTION_MINISTRE[0], m=0, rate=c.filter(function(x){ return !x[1]; }).map(function(x){ return x[0].toLowerCase(); });
+  S.ministre=null;
+  if(n===c.length){ m=base; avis(95); avis(95); avis(95); noter(t,"ok","Visite du ministre : tout est impeccable. Il annonce une subvention de "+mt(m)+" et vante l'hôpital devant les caméras."); }
+  else if(n>=5){ m=Math.round(base*n/c.length/100)*100; noter(t,"ok","Visite du ministre : bonne impression ("+n+" points sur "+c.length+"). Subvention de "+mt(m)+". À revoir : "+rate.join(", ")+"."); }
+  else if(n>=3) noter(t,"warn","Visite du ministre : rapport mitigé ("+n+" points sur "+c.length+"), pas de subvention. En cause : "+rate.join(", ")+".");
+  else { avis(30); avis(30); avis(30); noter(t,"bad","Visite du ministre : rapport sévère ("+n+" points sur "+c.length+"). La presse s'en fait l'écho. En cause : "+rate.join(", ")+"."); }
+  if(m) inscrire(t,"r:divers",m);
+  notifier("Visite du ministre",n+" points sur "+c.length+(m?" : subvention de "+mt(m):"")+".",t);
 }
 function lancerCrise(t){
   var l=["epidemie","accident","panne"];
@@ -1411,6 +1479,15 @@ function cloturer(t){
   absences(t); mutuelles(t); ajusterDemande();
   S.plaintes.slice().forEach(function(x){ if(x.limite<=t) indemniser(x,t,true); });
   if(S.portes){ planifierJour(t,t); planifierRdv(t,t); planifierEvenement(t); }
+  if(S.greffe&&S.ouverts.greffe){
+    inscrireReceveurs(t);
+    if(S.greffe.liste.length&&Math.random()<TAUX_GREFFON){ S.evts.push({t:t+Math.round(alea(7,21)*HEURE),greffe:1}); S.evts.sort(function(a,b){ return a.t-b.t; }); }
+  }
+  if(S.portes&&S.palier>=1&&!S.ministre&&Math.random()<TAUX_MINISTRE){
+    S.ministre={t:minuit(t+3*JOUR+2*HEURE)+10*HEURE};
+    noter(t,"warn","Le ministre de la Santé visitera l'hôpital "+dateLongue(S.ministre.t)+" à 10 h. Préparez-vous : la liste de ce qu'il vérifiera est sur l'accueil.");
+    notifier("Visite du ministre annoncée","Le ministre viendra "+dateLongue(S.ministre.t)+" à 10 h.",t);
+  }
   affecter(t); reappro(t);
 }
 // Le temps réel : on rejoue dans l'ordre tout ce qui devait arriver jusqu'à l'instant donné
@@ -1424,6 +1501,8 @@ function avancer(jusqua){
     if(S.commandes.length&&S.commandes[0].t<t){ t=S.commandes[0].t; quoi="livraison"; }
     if(S.releve&&S.releve<t){ t=S.releve; quoi="releve"; }
     if(S.crise&&S.crise.limite<t){ t=S.crise.limite; quoi="crise"; }
+    if(S.greffe&&S.greffe.offre&&S.greffe.offre.limite<t){ t=S.greffe.offre.limite; quoi="offre"; }
+    if(S.ministre&&S.ministre.t<t){ t=S.ministre.t; quoi="ministre"; }
     for(i=0;i<S.patients.length;i++){
       p=S.patients[i];
       if(p.etat==="diag"){ if(p.auto&&p.auto<=p.limite&&qualiteRelais(p)>0){ e=p.auto; q="relais"; } else { e=p.limite; q="depart"; } a=testsEnCours(p,S.horloge); if(a&&a<e){ e=a; q="resultat"; } }
@@ -1442,8 +1521,10 @@ function avancer(jusqua){
       if(a.dos&&S.dossiers[a.dos]){ qui=S.dossiers[a.dos]; p.prenom=qui.prenom; p.nom=qui.nom; p.femme=qui.femme; p.age=qui.age; p.dossier=a.dos; p.retour=1; qui=null; }
       accueillir(p,t);
     }
-    else if(quoi==="evenement"){ a=S.evts.shift(); if(a.crise) lancerCrise(t); else declencher(t); }
+    else if(quoi==="evenement"){ a=S.evts.shift(); if(a.crise) lancerCrise(t); else if(a.greffe) offrirGreffon(t); else declencher(t); }
     else if(quoi==="crise") resoudreCrise(t,null);
+    else if(quoi==="offre") deciderGreffon(t,null);
+    else if(quoi==="ministre") visiteMinistre(t);
     else if(quoi==="livraison"){ a=S.commandes.shift(); S.stock[a.p]=stockDe(a.p)+a.n; S.valStock[a.p]=(S.valStock[a.p]||0)+(a.v===undefined?PRODUITS[a.p].cout*a.n:a.v); }
     else if(quoi==="releve"){ S.releve=prochaineReleve(t+1000); affecter(t); }
     else if(quoi==="aggrave"){ aggraver(qui,t); affecter(t); }
@@ -1601,7 +1682,10 @@ function ecranAccueil(){
     +'<div class="bloc"><button type="button" class="btn principal large" data-a="patient"'+(S.portes?"":" disabled")+'>'+I.plus+'Faire entrer un patient</button>'
     +'<p class="aide">'+(S.portes?(pro?"Prochain patient attendu "+(cleJour(pro)===cleJour(maintenant())?"vers ":"demain vers ")+heureTxt(pro)+".":"Plus de patient prévu aujourd'hui."):"Le cabinet n'a pas encore ouvert ses portes.")+'</p></div>'
     +bloc
+    +bonusHtml()
     +criseHtml()
+    +greffonHtml()
+    +ministreHtml()
     +(al?'<div class="alertes">'+al+'</div>':"")
     +'<div class="tuiles">'
     +tuile("g1","patients","Patients",nd+" à diagnostiquer · "+(att+enSoin().length)+" en soins","patients")
@@ -1624,6 +1708,26 @@ function ecranAccueil(){
     +'</div>'
     +palierHtml()
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
+}
+function bonusHtml(){
+  var b=U.bonus, i, pts="";
+  if(!b) return "";
+  for(i=1;i<=SERIE_MAX;i++) pts+='<span class="jour-serie'+(i<=b.serie?" fait":"")+'">'+i+'</span>';
+  return '<div class="carte"><div class="carte-haut"><h3>Prime du jour : '+mt(b.m)+'<small>'+(b.serie>1?b.serie+" jours d'affilée":"Revenez demain pour la doubler")+(b.serie<SERIE_MAX?" · demain : "+mt((S.palier+1)*BONUS_JOUR*Math.min(b.serie+1,SERIE_MAX)):" · maximum atteint")+'</small></h3><button type="button" class="btn petit" data-a="finbonus">Fermer</button></div><div class="serie">'+pts+'</div></div>';
+}
+function greffonHtml(){
+  var o=S.greffe&&S.greffe.offre, x;
+  if(!o) return "";
+  x=S.greffe.liste[o.qui];
+  return '<div class="carte crise"><div class="carte-haut"><h3>Greffon de '+ORGANES[o.organe]+' disponible<small>'+(x?"Pour "+h(nomComplet(x))+", "+x.age+" ans, sur liste d'attente depuis "+dateCourte(x.depuis)+".":"")+' Une fois accepté, il faut opérer dans les six heures. '+(nb("transplanteur")?pl(S.equipe.filter(function(e){ return e.role==="transplanteur"&&enPoste(e); }).length,"transplanteur en poste","transplanteurs en poste")+" maintenant.":"Vous n'avez aucun chirurgien transplanteur.")+'</small></h3><span class="puce bad num">réponse dans <span data-reste="'+o.limite+'">'+resteTxt(o.limite)+'</span></span></div>'
+    +'<div class="actions"><button type="button" class="btn principal" data-a="greffon" data-k="1">Accepter et opérer</button><button type="button" class="btn" data-a="greffon" data-k="0">Refuser</button></div></div>';
+}
+function ministreHtml(){
+  var M=S.ministre;
+  if(!M) return "";
+  return '<div class="carte"><div class="carte-haut"><h3>Visite du ministre de la Santé<small>'+dateLongue(M.t)+' à 10 h. Si tout est en ordre, il accorde une subvention jusqu\'à '+mt(SUBVENTION_MINISTRE[S.palier]||0)+'.</small></h3><span class="puce warn num">dans <span data-reste="'+M.t+'">'+resteTxt(M.t)+'</span></span></div>'
+    +'<ul class="liste">'+criteresMinistre().map(function(c){ return '<li class="rang"><div><b>'+c[0]+'</b></div><div class="droite"><span class="puce '+(c[1]?"ok":"bad")+'">'+(c[1]?"✓ En ordre":"✗ À corriger")+'</span></div></li>'; }).join("")+'</ul>'
+    +'<p class="aide">État en ce moment. Ce qui compte, c\'est la situation au moment de la visite.</p></div>';
 }
 function criseHtml(){
   var C=S.crise, X;
@@ -1832,6 +1936,7 @@ function carteService(k){
   else etat='<span class="puce ok">Ouvert</span>';
   return '<div class="carte"><div class="carte-haut"><div class="entete"><span class="tuile-icone '+sv.g+'">'+I[sv.ic]+'</span><h3>'+sv.nom+'<small>'+sv.roles.map(function(r){ return ROLES[r].pluriel; }).join(", ")+' · '+(sv.diag?"radios, échographies, scanners et IRM pour vos diagnostics":sv.duree+" min par patient")+'</small></h3></div>'+etat+'</div>'
     +(verrou?"":'<p class="aide">'+(sv.diag?"Examen facturé "+mt(S.tarifs[k])+" au patient, le double pour un scanner, le triple pour une IRM":"Tarif : "+mt(S.tarifs[k]))+(sv.entretien?' · entretien '+mt(sv.entretien)+' par jour':"")+(sv.sejour?' · séjour de '+sv.sejour[0]+' à '+sv.sejour[1]+' jours ensuite':"")+(ouvert&&n?' · '+pl(n,"soignant","soignants"):"")+'</p>')
+    +(k==="greffe"&&ouvert?'<p class="aide">Liste d\'attente : '+(S.greffe.liste.length?S.greffe.liste.map(function(x){ return h(nomComplet(x))+" ("+ORGANES[x.organe]+")"; }).join(", "):"personne pour l'instant")+'. Greffes réussies : '+(S.greffe.faites||0)+'. Les greffons arrivent à l\'improviste.</p>':"")
     +(action?'<div class="actions">'+action+'</div>':"")+'</div>';
 }
 function ecranServices(){
@@ -2275,6 +2380,8 @@ var A={
     noter(t,"","Étude lancée : « "+e[1]+" » ("+mt(e[2])+"). Résultats dans "+e[3]+" jours.");
     return true;
   },
+  greffon:function(d){ return deciderGreffon(maintenant(),d.k==="1"); },
+  finbonus:function(){ U.bonus=null; return false; },
   rdv:function(d){
     var x=RDV_SERVICES.filter(function(r){ return r[0]===d.k; })[0], t=maintenant();
     if(!x) return false;
@@ -2434,6 +2541,16 @@ function resumer(avant){
   if(d<HEURE) return;
   U.resume={duree:d,soignes:S.soignes-avant.soignes,caisse:Math.round(S.caisse-avant.caisse),rep:Math.round(reputation()-avant.rep)};
 }
+function bonusQuotidien(){
+  var n=Date.now(), j=cleJour(n), C=S.connexion, m;
+  if(!S.fondeLe||!C||C.j===j) return false;
+  C.serie=C.j===cleJour(n-JOUR)?C.serie+1:1; C.j=j;
+  m=(S.palier+1)*BONUS_JOUR*Math.min(C.serie,SERIE_MAX);
+  inscrire(S.horloge,"r:divers",m);
+  noter(S.horloge,"ok","Prime du jour : "+mt(m)+" ("+(C.serie>1?C.serie+" jours d'affilée":"premier jour")+").");
+  U.bonus={m:m,serie:C.serie};
+  return true;
+}
 function battement(retour){
   var n=Date.now(), ecoule=Math.min(n-dernierBattement,2000), paye, avant, change;
   dernierBattement=n;
@@ -2441,6 +2558,7 @@ function battement(retour){
   avant={t:S.horloge,soignes:S.soignes,caisse:S.caisse,rep:reputation()};
   paye=activite(ecoule);
   change=avancer(maintenant());
+  if(bonusQuotidien()) change=true;
   if(retour) resumer(avant);
   if(change||paye){ marquer(); rendre(); } else if(retour) rendre(); else tic();
   pousser(false);
@@ -2495,6 +2613,7 @@ function demarrer(donnees){
     S=repris; migrer();
     avant={t:S.horloge,soignes:S.soignes,caisse:S.caisse,rep:reputation()};
     if(S.fondeLe&&avancer(maintenant())){ marquer(); resumer(avant); }
+    if(bonusQuotidien()) marquer();
   }
   rendre();
   setInterval(battement,1000);
