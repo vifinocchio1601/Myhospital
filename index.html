@@ -167,6 +167,10 @@ svg.graphe{width:100%;height:auto}
 @keyframes battre{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
 .cliche{stroke:none;display:block;width:100%;max-width:280px;height:auto;margin-top:6px;border-radius:8px;background:#0b0f13}
 .cliche.ecg{background:#0b1a12;background-image:linear-gradient(#123222 1px,transparent 1px),linear-gradient(90deg,#123222 1px,transparent 1px);background-size:14px 14px}
+.medaille{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#3a2a00;flex:none}
+.m-or{background:linear-gradient(160deg,#ffe27a,#d4a017)} .m-argent{background:linear-gradient(160deg,#f1f3f5,#a8b0b8)} .m-bronze{background:linear-gradient(160deg,#f0b27a,#a8642a)}
+html.nuit body{background:#070d14}
+html.nuit .carte,html.nuit .jauge,html.nuit .tuile{background:#0e1823}
 .carte.crise{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .vide{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:18px;color:var(--muted)}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
@@ -538,6 +542,8 @@ var BIOS=["Ancien boulanger à la retraite, vient avec sa fille.","Institutrice,
 // Mode belge réaliste : mutualités et INAMI, ticket modérateur, pas de supplément pour une chambre commune, financement fédéral (BMF) par lit
 var ANIM_SALLES=["accueil","urgences","consult","soins","imagerie","chirurgie","maternite","pediatrie","dentaire","rea","cardio","psy","greffe","onco","lits","privees"];
 var anim={id:0,pos:{},ambu:null,vus:{},coul:null,tc:0};
+var MEDAILLES=[["or","Médaille d'or",20000],["argent","Médaille d'argent",10000],["bronze","Médaille de bronze",5000]];
+var CLE_NUIT="myhospital-nuit";
 var PART_BELGE=0.25, BMF_LIT=2000, BMF_PALIER=5000;
 // Le plan du bâtiment, étage par étage
 var ETAGES=[["Rez-de-chaussée",["accueil","urgences","consult","soins","imagerie","pharmacie"]],["1er étage",["chirurgie","maternite","pediatrie","dentaire"]],["2e étage",["rea","cardio","psy","greffe","onco"]],["3e étage",["lits","privees"]],["Annexes",["recherche","ecole","cafeteria","parking"]]];
@@ -676,7 +682,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,impots:1,filiales:{},classement:null,tele:{liste:[],effet:null},perso:{couleur:"bleu",logo:"H"},carnet:{},relations:[],vie:null,belge:0,missions:{en:null,faites:0,bonus:null},prestige:0,heritage:[],ville:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,impots:1,filiales:{},classement:null,tele:{liste:[],effet:null},perso:{couleur:"bleu",logo:"H"},carnet:{},relations:[],vie:null,belge:0,annee:null,bilans:[],missions:{en:null,faites:0,bonus:null},prestige:0,heritage:[],ville:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -715,6 +721,7 @@ function migrer(){
     S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
   }
+  if(!S.bilans){ S.bilans=[]; S.annee=null; }
   if(!S.relations){
     S.relations=[]; S.vie=null; S.belge=0;
     S.equipe.forEach(function(e){ if(!e.caractere) e.caractere=tirer(Object.keys(CARACTERES)); });
@@ -1453,7 +1460,7 @@ function porterPlainte(p,t,chance,min,max,motif){
   noter(t,"bad","Plainte contre l'hôpital : "+motif+" ("+nomComplet(p)+"). À vous de décider, dans le Journal.");
 }
 function deces(p,t,cause,faute){
-  S.serie=0;
+  S.serie=0; anneeCourante(t).deces++;
   if(faute) reportage(t,0,"Décès suspect à "+S.nom+" : la famille de "+nomComplet(p)+" demande des comptes",0.5);
   var e=parId(S.equipe,p.soignant);
   if(e&&e.occupe===p.id) e.occupe=null;
@@ -1475,8 +1482,8 @@ function finSoin(p,t){
     porterPlainte(p,t,faute?0.25:0.03,500,1500,"complication après les soins");
   }
   facturer(t,"r:"+p.sv,prix,sv.prix*part); inscrire(t,"f:"+p.sv,Math.max(1,sv.prix*part*PART_FOURNITURES));
-  p.paye+=prix; S.soignes++; S.stat.soignes++; S.serie=(S.serie||0)+1;
-  if(p.greffe){ S.greffe.faites=(S.greffe.faites||0)+1; avis(95); avis(95); noter(t,"ok","Greffe réussie pour "+nomComplet(p)+". La presse en parle."); reportage(t,1,"Une greffe de "+ORGANES[p.mal.slice(7)]+" sauve "+nomComplet(p)+" à "+S.nom,0.8); }
+  p.paye+=prix; S.soignes++; S.stat.soignes++; S.serie=(S.serie||0)+1; anneeCourante(t).soignes++;
+  if(p.greffe){ S.greffe.faites=(S.greffe.faites||0)+1; anneeCourante(t).greffes++; avis(95); avis(95); noter(t,"ok","Greffe réussie pour "+nomComplet(p)+". La presse en parle."); reportage(t,1,"Une greffe de "+ORGANES[p.mal.slice(7)]+" sauve "+nomComplet(p)+" à "+S.nom,0.8); }
   if(p.heli){ facturer(t,"r:"+p.sv,FORFAIT_HELICO,FORFAIT_HELICO); p.paye+=FORFAIT_HELICO; }
   if(p.servi===1){ inscrire(t,"r:pharma",prixVente(p.trait)); p.paye+=prixVente(p.trait); }
   note=satisfaction(p,q)-(p.complication?25:0);
@@ -1658,7 +1665,7 @@ function publierClassement(t,premier){
   l=C.rivaux.map(function(x){ return {nom:x.nom,score:x.score}; }); l.push({nom:S.nom,score:moi,moi:1});
   l.sort(function(a,b){ return b.score-a.score; });
   r=l.findIndex(function(x){ return x.moi; })+1; ancien=C.rang;
-  C.liste=l; C.rang=r; C.score=moi; C.t=t; C.deces=S.medical?S.medical.deces:0;
+  C.liste=l; C.rang=r; C.score=moi; C.t=t; if(!premier){ var A=anneeCourante(t-1000); A.meilleurRang=A.meilleurRang?Math.min(A.meilleurRang,r):r; } C.deces=S.medical?S.medical.deces:0;
   C.hist.push({t:t,r:r}); if(C.hist.length>12) C.hist.shift();
   if(premier) return;
   PRIMES_CLASSEMENT.some(function(x){ if(r<=x[0]){ prime=x[1]; return true; } return false; });
@@ -1727,6 +1734,36 @@ function vieHtml(){
   if(!V) return "";
   return '<div class="carte"><div class="carte-haut"><h3>Vie de l\'équipe<small>'+h(texteVie(V))+'</small></h3></div><div class="actions">'
     +CHOIX_VIE[V.k].map(function(c,i){ return '<button type="button" class="btn'+(i===0?" principal":"")+' petit" data-a="vie" data-k="'+c[0]+'"'+(c[2]>S.caisse?" disabled":"")+'>'+c[1]+(c[2]?" · "+mt(c[2]):"")+'</button>'; }).join("")+'</div></div>';
+}
+function anneeCourante(t){
+  var an=new Date(t).getFullYear();
+  if(!S.annee||S.annee.an!==an) S.annee={an:an,soignes:0,deces:0,greffes:0,record:0,meilleurRang:0};
+  return S.annee;
+}
+function chiffresAnnee(an){
+  var r=0, d=0, imp=0, k, m;
+  for(k in S.cm) if(k.slice(0,4)===String(an)){ m=S.cm[k]; r+=recettesDe(m); d+=depensesDe(m); imp+=m["t:impots"]||0; }
+  return {recettes:r,depenses:d,res:r-d,impots:imp};
+}
+function bilanAnnuel(tj){
+  var A=S.annee, c, pts=0, med=null, b;
+  if(!A) return;
+  c=chiffresAnnee(A.an);
+  if(c.res>0) pts++; if(c.res>200000) pts++; if(reputation()>=70) pts++; if(A.meilleurRang&&A.meilleurRang<=3) pts++; if(A.deces<=5) pts++;
+  med=pts>=4?MEDAILLES[0]:pts===3?MEDAILLES[1]:pts===2?MEDAILLES[2]:null;
+  b={an:A.an,recettes:c.recettes,depenses:c.depenses,res:c.res,impots:c.impots,soignes:A.soignes,deces:A.deces,greffes:A.greffes,record:A.record,rang:A.meilleurRang,rep:Math.round(reputation()),med:med?med[0]:"",t:tj};
+  S.bilans.unshift(b); if(S.bilans.length>10) S.bilans.length=10;
+  if(med) inscrire(tj+2000,"r:divers",med[2]);
+  noter(tj,"ok","Bilan de l'année "+A.an+" : "+pl(A.soignes,"patient soigné","patients soignés")+", résultat de "+signeM(c.res)+"."+(med?" "+med[1]+" et prime de "+mt(med[2])+" !":""));
+  notifier("Bilan de l'année "+A.an,med?med[1]+" !":"Votre récapitulatif est prêt.",tj);
+  son("succes",tj);
+  U.bilanVu=0;
+}
+function bilanHtml(b,complet){
+  var med=MEDAILLES.filter(function(m){ return m[0]===b.med; })[0];
+  return '<div class="carte'+(complet?"":" bilan")+'"><div class="carte-haut"><h3>'+(complet?"Bilan de l'année ":"Année ")+b.an+'<small>'+(med?med[1]+" · prime de "+mt(med[2]):"Pas de médaille cette année")+'</small></h3>'+(med?'<span class="medaille m-'+med[0]+'">'+(med[0]==="or"?"1":med[0]==="argent"?"2":"3")+'</span>':"")+(complet?'<button type="button" class="btn petit" data-a="finbilan">Fermer</button>':"")+'</div>'
+    +ligne("Patients soignés",nombre(b.soignes))+ligne("Recettes",mt(b.recettes))+ligne("Dépenses",mt(b.depenses))+ligne("Résultat",'<b class="'+(b.res>=0?"plus-c":"moins-c")+'">'+signeM(b.res)+'</b>')
+    +(b.impots?ligne("Dont impôt",mt(b.impots)):"")+ligne("Meilleure journée",mt(b.record||0))+ligne("Décès",String(b.deces))+(b.greffes?ligne("Greffes",String(b.greffes)):"")+(b.rang?ligne("Meilleur classement",(b.rang===1?"1er":b.rang+"e")):"")+ligne("Réputation en fin d'année",b.rep+" / 100")+'</div>';
 }
 function retourMission(t){
   var M=S.missions, x=M.en, d=MISSIONS.filter(function(m){ return m[0]===x.k; })[0];
@@ -1906,7 +1943,7 @@ function cloturer(t){
   });
   c=S.cj[cleJour(tj)]||{}; res=recettesDe(c)-depensesDe(c);
   if(S.portes) noter(tj,res>=0?"ok":"warn","Jour "+S.jour+" : "+pl(S.stat.soignes,"patient soigné","patients soignés")+(S.stat.partis?", "+pl(S.stat.partis,"reparti","repartis")+" sans soins":"")+(S.stat.transferes?", "+pl(S.stat.transferes,"envoyé","envoyés")+" ailleurs":"")+". Résultat de la journée : "+signeM(res)+".");
-  if(S.portes){ S.record=Math.max(S.record||0,res); if(!S.histo) S.histo=[]; S.histo.push({d:tj,c:Math.round(S.caisse),r:Math.round(reputation()),s:S.stat.soignes,x:Math.round(res)}); if(S.histo.length>HISTO_MAX) S.histo.shift(); }
+  if(S.portes){ S.record=Math.max(S.record||0,res); anneeCourante(tj).record=Math.max(anneeCourante(tj).record||0,res); if(!S.histo) S.histo=[]; S.histo.push({d:tj,c:Math.round(S.caisse),r:Math.round(reputation()),s:S.stat.soignes,x:Math.round(res)}); if(S.histo.length>HISTO_MAX) S.histo.shift(); }
   S.stat=statVide(); S.jour++;
   S.equipe.forEach(function(e){ e.minutes=0; });
   garde=cleJour(t-JOURS_GARDES*JOUR);
@@ -1919,6 +1956,7 @@ function cloturer(t){
   if(S.portes&&!S.ville&&Math.random()<TAUX_VILLE) annoncerVille(t);
   if(S.portes&&S.stat.partis>=10) reportage(tj,0,"Des dizaines de patients repartent de "+S.nom+" sans avoir été soignés",0.5);
   if(cleMois(tj)!==cleMois(t)&&S.belge&&S.palier>=1){ var bmf=(S.lits+(S.privees||0))*BMF_LIT+S.palier*BMF_PALIER; inscrire(t,"r:bmf",bmf); noter(t,"ok","Budget des moyens financiers (BMF) : l'État fédéral verse "+mt(bmf)+" pour le mois."); }
+  if(new Date(tj).getFullYear()!==new Date(t).getFullYear()&&S.portes) bilanAnnuel(tj);
   if(cleMois(tj)!==cleMois(t)){ impot(tj); if(S.portes) publierClassement(t); }
   monterPalier(t); verifierObjectifs(t);
   absences(t); mutuelles(t); ajusterDemande();
@@ -2120,7 +2158,7 @@ function ecranAccueil(){
   if(r) bloc='<div class="carte"><div class="carte-haut"><h3>Pendant votre absence<small>'+dureeTxt(r.duree)+'</small></h3><button type="button" class="btn petit" data-a="resume">Fermer</button></div>'
     +'<p>'+pl(r.soignes,"patient soigné","patients soignés")+'. Caisse : <b class="'+(r.caisse>=0?"plus-c":"moins-c")+'">'+signeM(r.caisse)+'</b>. Réputation : '+(r.rep>0?"+":r.rep<0?"−":"")+Math.abs(r.rep)+' '+(Math.abs(r.rep)>1?"points":"point")+'.</p></div>';
   return barre()
-    +'<div class="titre"><h1>'+h(S.nom)+'</h1><p>'+PALIERS[S.palier].nom+' · jour '+S.jour+' · '+SAISONS[saisonDe(maintenant())].nom+(S.meteo&&S.meteo.cur?' · '+Math.round(S.meteo.cur.temp)+' °C à '+h(S.meteo.ville):"")+' · Directeur : '+h(S.prenom)+'</p></div>'
+    +'<div class="titre"><h1>'+h(S.nom)+'</h1><p>'+PALIERS[S.palier].nom+' · jour '+S.jour+' · '+SAISONS[saisonDe(maintenant())].nom+(S.meteo&&S.meteo.cur?' · '+Math.round(S.meteo.cur.temp)+' °C à '+h(S.meteo.ville):"")+(estNuit()?' · nuit':"")+' · Directeur : '+h(S.prenom)+'</p></div>'
     +'<div class="jauges">'
     +jauge("Caisse",mt(S.caisse),S.caisse<0?"n0":"",null,"Aujourd'hui "+signeM(jr))
     +jauge("Réputation",rep+" / 100",rep>=65?"n2":rep<40?"n0":"",rep,libReputation(rep))
@@ -2131,6 +2169,7 @@ function ecranAccueil(){
     +'<div class="bloc"><button type="button" class="btn principal large" data-a="patient"'+(S.portes?"":" disabled")+'>'+I.plus+'Faire entrer un patient</button>'
     +'<p class="aide">'+(S.portes?(pro?"Prochain patient attendu "+(cleJour(pro)===cleJour(maintenant())?"vers ":"demain vers ")+heureTxt(pro)+".":"Plus de patient prévu aujourd'hui."):"Le cabinet n'a pas encore ouvert ses portes.")+'</p></div>'
     +bloc
+    +(S.bilans&&S.bilans.length&&!U.bilanVu&&maintenant()-S.bilans[0].t<7*JOUR?bilanHtml(S.bilans[0],true):"")
     +campagneHtml()
     +bonusHtml()
     +calendrierHtml()
@@ -2571,9 +2610,13 @@ function courbe(id,titre,l,f,fmt){
 }
 function court(v){ var a=Math.abs(v); return (v<0?"−":"")+(a>=1e6?(a/1e6).toFixed(1).replace(".",",")+" M":a>=1e4?Math.round(a/1e3)+" k":nombre(Math.round(a))); }
 function ecranStats(){
-  var l=S.histo||[];
+  var l=S.histo||[], an=new Date(maintenant()).getFullYear(), c=chiffresAnnee(an), A=anneeCourante(maintenant());
+  var annee='<div class="carte"><h2>Année '+an+' en cours</h2>'+ligne("Patients soignés",nombre(A.soignes))+ligne("Résultat",signeM(c.res))+ligne("Décès",String(A.deces))+'<p class="aide">Le bilan de l\'année tombe le 1er janvier, avec une médaille et une prime si l\'année a été bonne.</p></div>'
+    +((S.bilans||[]).length?'<div class="bloc"><h2>Années passées</h2>'+S.bilans.map(function(b){ return bilanHtml(b,false); }).join("")+'</div>':"");
+  if(l.length<2) return barre()+entete("Statistiques","Évolution jour après jour")+annee+'<p class="vide">Les courbes se remplissent chaque nuit à minuit.</p>';
   if(l.length<2) return barre()+entete("Statistiques","Évolution jour après jour")+'<p class="vide">Les courbes se remplissent chaque nuit à minuit. Revenez dans '+(l.length?"un jour":"deux jours")+' pour voir les premières.</p>';
   return barre()+entete("Statistiques","Les "+l.length+" derniers jours · touchez une courbe pour lire un jour")
+    +annee
     +courbe("caisse","Caisse à minuit",l,function(x){ return x.c; },mt)
     +courbe("res","Résultat de la journée",l,function(x){ return x.x; },signeM)
     +courbe("rep","Réputation",l,function(x){ return x.r; },function(v){ return v+" / 100"; })
@@ -2700,7 +2743,9 @@ function ecranEtages(){
 function geometrie(W){
   var g=8, cw=(W-g*5)/4, ch=Math.max(64,cw*0.9), salles={};
   ANIM_SALLES.forEach(function(k,i){ salles[k]={x:g+(i%4)*(cw+g),y:g+Math.floor(i/4)*(ch+g),w:cw,h:ch}; });
-  return {salles:salles,H:g+4*(ch+g)+70,porte:{x:W/2,y:g+4*(ch+g)+12},route:g+4*(ch+g)+44};
+  var toit=44;
+  ANIM_SALLES.forEach(function(k){ salles[k].y+=toit; });
+  return {salles:salles,H:toit+g+4*(ch+g)+70,porte:{x:W/2,y:toit+g+4*(ch+g)+12},route:toit+g+4*(ch+g)+44,toit:toit};
 }
 function cibleDe(p,G){
   var k=p.etat==="diag"?"accueil":p.etat==="lit"?(p.prive?"privees":"lits"):p.sv, r=G.salles[k], gauche=p.etat!=="soin", col=p.id%4, lig=Math.floor(p.id/4)%3;
@@ -2729,6 +2774,34 @@ function dessiner(){
     x.fillStyle=C["--ink"]; for(i=0;i<Math.min(n,5);i++) x.fillRect(r.x+r.w-10-i*7,r.y+r.h-10,5,5);
     x.globalAlpha=1;
   });
+  // toit : héliport, centre de recherche, école ; dans les salles : appareils
+  x.fillStyle=C["--surface"]; x.fillRect(0,0,W,G.toit-6);
+  x.fillStyle=C["--muted"]; x.font="500 9px Inter,-apple-system,sans-serif"; x.fillText("Toit",6,12);
+  if(niv("heliport")){ x.strokeStyle=C["--ink"]; x.lineWidth=2; x.beginPath(); x.arc(W-30,G.toit/2-2,14,0,Math.PI*2); x.stroke(); x.fillStyle=C["--ink"]; x.font="800 13px Inter,-apple-system,sans-serif"; x.fillText("H",W-34.5,G.toit/2+3); }
+  if(S.recherche&&S.recherche.ouvert){ x.fillStyle=C["--accent"]; x.fillRect(40,8,50,G.toit-20); x.fillStyle="#fff"; x.font="600 8px Inter,-apple-system,sans-serif"; x.fillText("Recherche",44,G.toit/2); }
+  if(S.ecole){ x.fillStyle=C["--tri-vert"]; x.fillRect(96,8,40,G.toit-20); x.fillStyle="#fff"; x.font="600 8px Inter,-apple-system,sans-serif"; x.fillText("École",104,G.toit/2); }
+  (function(){
+    var r=G.salles.imagerie, b=G.salles.chirurgie;
+    x.lineWidth=3;
+    if(S.ouverts.imagerie&&S.palier>=2){ x.strokeStyle=C["--muted"]; x.beginPath(); x.arc(r.x+r.w-16,r.y+r.h-22,8,0,Math.PI*2); x.stroke(); }
+    if(niv("irm")){ x.strokeStyle=C["--accent"]; x.beginPath(); x.arc(r.x+r.w-36,r.y+r.h-22,8,0,Math.PI*2); x.stroke(); }
+    if(niv("bloc")&&S.ouverts.chirurgie){ x.fillStyle="#fff7c2"; x.globalAlpha=0.5+0.2*Math.sin(now/400); x.beginPath(); x.arc(b.x+b.w-14,b.y+24,6,0,Math.PI*2); x.fill(); x.globalAlpha=1; }
+    x.lineWidth=1;
+  })();
+  // hélicoptère : il se pose sur le toit quand un patient arrive par les airs
+  S.patients.forEach(function(p){ if(p.heli&&!anim.vus["h"+p.id]&&now-p.arrive<90000){ anim.vus["h"+p.id]=1; anim.helico={t:now}; } });
+  if(anim.helico&&niv("heliport")){
+    var e=(now-anim.helico.t)/3000, hy=-20+Math.min(1,e)*(G.toit/2+18);
+    if(e>2) anim.helico=null;
+    else { x.fillStyle=C["--bad"]; x.fillRect(W-44,hy-6,28,10); x.strokeStyle=C["--ink"]; x.lineWidth=1.5; x.beginPath(); x.moveTo(W-30-18*Math.cos(now/40),hy-9); x.lineTo(W-30+18*Math.cos(now/40),hy-9); x.stroke(); x.lineWidth=1; }
+  }
+  // parking et cafétéria, de part et d'autre de l'entrée
+  (function(){
+    var i, n=niv("parking")*3, y0=G.porte.y-2;
+    for(i=0;i<n;i++){ x.fillStyle=["#5c7cfa","#e8590c","#adb5bd","#2f9e44"][i%4]; x.fillRect(10+i*16,y0,12,8); }
+    if(niv("cafeteria")){ x.fillStyle=C["--ink"]; x.font="600 9px Inter,-apple-system,sans-serif"; x.fillText("Café ☕",W-60,y0+8); }
+    for(i=0;i<niv("ambulance");i++){ x.fillStyle="#f4f6f8"; x.fillRect(G.porte.x+30+i*26,y0,22,9); x.fillStyle=C["--bad"]; x.fillRect(G.porte.x+38+i*26,y0+2,5,5); }
+  })();
   // route, porte
   x.fillStyle=C["--surface"]; x.fillRect(0,G.route-10,W,20);
   x.strokeStyle=C["--faint"]; x.setLineDash([8,8]); x.beginPath(); x.moveTo(0,G.route); x.lineTo(W,G.route); x.stroke(); x.setLineDash([]);
@@ -2746,6 +2819,7 @@ function dessiner(){
     if(p.etat==="lit"){ x.strokeStyle=C["--faint"]; x.lineWidth=1; x.strokeRect(q.x-5,q.y-4,10,8); }
   });
   Object.keys(anim.pos).forEach(function(id){ if(!vivants[id]){ var q=anim.pos[id]; q.y+=2.5; q.x+=(G.porte.x-q.x)*0.05; if(q.y>G.H) delete anim.pos[id]; else { x.fillStyle=C["--faint"]; x.beginPath(); x.arc(q.x,q.y,3,0,Math.PI*2); x.fill(); } } });
+  if(estNuit()){ x.fillStyle="rgba(10,20,60,0.22)"; x.fillRect(0,0,W,G.H); }
   // ambulance
   if(anim.ambu){
     var d=(now-anim.ambu.t)/2500, ax=-50+d*(G.porte.x+30);
@@ -2894,6 +2968,7 @@ function ecranReglages(){
     +'<div class="carte"><h2>Sauvegarde</h2><p>'+etat+'</p></div>'
     +'<div class="carte"><h2>Mode belge réaliste</h2><p class="aide">Les mutuelles deviennent des mutualités qui remboursent pour l\'INAMI ; le patient ne paie que le ticket modérateur (25 % du prix habituel au lieu de 40 %) ; aucun supplément n\'est permis pour une nuit en chambre commune ; et chaque mois, l\'État fédéral verse le budget des moyens financiers (BMF), selon le nombre de lits. Les montants passent en euros.</p>'
       +'<div class="actions"><button type="button" class="btn'+(S.belge?"":" principal")+'" data-a="belge">'+(S.belge?"Désactiver le mode belge":"Activer le mode belge")+'</button>'+(S.belge?'<span class="puce ok">Activé</span>':"")+'</div></div>'
+    +'<div class="carte"><h2>Ambiance jour et nuit</h2><p class="aide">De 21 h à 7 h, le jeu passe automatiquement en mode nuit, plus sombre ; la vue animée s\'assombrit aussi.</p><div class="actions"><button type="button" class="btn" data-a="nuit">'+((function(){ try{ return localStorage.getItem(CLE_NUIT)==="0"; }catch(e){ return false; } })()?"Activer le mode nuit automatique":"Désactiver le mode nuit automatique")+'</button></div></div>'
     +'<div class="carte"><h2>Sons et ambiance</h2><p class="aide">Des bips pour les patients urgents, une sirène pour les crises et les greffons, une petite fanfare pour les réussites. La musique d\'ambiance est un accord doux et discret. Sur iPhone, pensez à désactiver le mode silencieux.</p>'
       +'<div class="actions"><button type="button" class="btn'+(lirePref(CLE_SONS)?"":" principal")+'" data-a="sons">'+(lirePref(CLE_SONS)?"Couper les sons":"Activer les sons")+'</button><button type="button" class="btn'+(lirePref(CLE_MUSIQUE)?"":" principal")+'" data-a="musique">'+(lirePref(CLE_MUSIQUE)?"Couper la musique":"Musique d\'ambiance")+'</button></div></div>'
     +'<div class="carte"><h2>Personnaliser l\'hôpital</h2>'
@@ -2974,6 +3049,7 @@ var A={
     son(ok&&bon?"succes":ok||bon?"patient":"erreur");
     U.retour={c:ok&&bon?"ok":bon?"warn":"bad",m:txt}; U.ecran="patients"; U.dossier=null; U.choix=null; U.trait=null; return true;
   },
+  finbilan:function(){ U.bilanVu=1; return false; },
   planmode:function(d){ U.planMode=d.k; return false; },
   campagne:function(d){
     if(modeCampagne()) return false;
@@ -3105,6 +3181,7 @@ var A={
     if(S.belge){ S.devise="€"; S.tarifs.lit=Math.min(S.tarifs.lit,REF_LIT); noter(maintenant(),"ok","Mode belge réaliste activé : mutualités et INAMI, ticket modérateur de 25 %, pas de supplément en chambre commune, BMF chaque mois."); }
     return true;
   },
+  nuit:function(){ try{ if(localStorage.getItem(CLE_NUIT)==="0") localStorage.removeItem(CLE_NUIT); else localStorage.setItem(CLE_NUIT,"0"); }catch(e){} return false; },
   sons:function(){ var v=!lirePref(CLE_SONS); ecrirePref(CLE_SONS,v); if(v){ contexteAudio(); son("succes"); } return false; },
   musique:function(){ var v=!lirePref(CLE_MUSIQUE); ecrirePref(CLE_MUSIQUE,v); if(v) lancerMusique(); else couperMusique(); return false; },
   sansmeteo:function(){ S.meteo=null; if(S.portes) replanifier(maintenant()); return true; },
@@ -3318,7 +3395,14 @@ function motsBelges(racine){
   w=document.createTreeWalker(racine,NodeFilter.SHOW_TEXT,null,false);
   while((n=w.nextNode())){ v=n.nodeValue; if(!/[Mm]utuelle|Payé par le patient/.test(v)) continue; MOTS_BELGES.forEach(function(m){ v=v.replace(m[0],m[1]); }); n.nodeValue=v; }
 }
+function estNuit(){ var h=new Date().getHours(); return h>=21||h<7; }
+function ambiance(){
+  var r=document.documentElement, auto=!(function(){ try{ return localStorage.getItem(CLE_NUIT)==="0"; }catch(e){ return false; } })(), nuit=auto&&estNuit();
+  if(nuit){ r.setAttribute("data-theme","dark"); r.classList.add("nuit"); r.dataset.parNuit="1"; }
+  else if(r.dataset.parNuit){ r.removeAttribute("data-theme"); r.classList.remove("nuit"); delete r.dataset.parNuit; }
+}
 function couleurs(){
+  ambiance();
   var c=COULEURS.filter(function(x){ return x[0]===(S.perso&&S.perso.couleur); })[0], r=document.documentElement.style;
   if(!c||c[0]==="bleu"){ ["--accent","--accent-2","--c1","--c1b"].forEach(function(v){ r.removeProperty(v); }); return; }
   r.setProperty("--accent",c[2]); r.setProperty("--accent-2",c[3]); r.setProperty("--c1",c[2]); r.setProperty("--c1b",c[3]);
