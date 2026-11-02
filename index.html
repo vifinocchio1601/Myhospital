@@ -452,6 +452,25 @@ var ORGANES={rein:"rein",foie:"foie",coeur:"cœur"};
 var BONUS_JOUR=250, SERIE_MAX=7;
 // Visite du ministre : annoncée trois jours à l'avance, à 10 h ; sept critères vérifiés sur place
 var TAUX_MINISTRE=0.12, SUBVENTION_MINISTRE=[3000,8000,15000,25000,40000];
+// Fondation : un gala de charité tous les sept jours au plus. On choisit sa taille et sa cause, puis on invite des donateurs ; ceux qui tiennent à la cause donnent bien plus.
+var GALAS=[["petit","Dîner de charité",2000,4],["moyen","Soirée de gala",6000,8],["grand","Grand bal de la fondation",15000,12]];
+var CAUSES=[["enfants","Les enfants malades"],["coeur","Le cœur et les soins intensifs"],["cancer","La lutte contre le cancer"],["recherche","La recherche médicale"],["equipement","De nouveaux équipements"],["urgences","Les urgences"]];
+var DELAI_GALA=2, PAUSE_GALA=7;
+// Le calendrier réel : certaines périodes de l'année amènent leurs maladies (jour de début et de fin, au format mois-jour)
+var PERIODES=[
+  ["0101","0102","Lendemain du réveillon","brûlures et chutes après les fêtes",{brulure:2.5,plaie:2,commotion:1.8,gastro:1.5}],
+  ["0110","0215","Pic de grippe","la grippe bat son plein",{grippe:1.8,bronchite:1.4,pneumonie:1.4,bronchiolite:1.4}],
+  ["0715","0820","Canicule","coups de chaleur et déshydratation",{chaleur:2.5,gastro:1.5,brulure:1.3,angoisse:1.2}],
+  ["0901","0930","Rentrée scolaire","épidémies chez les enfants et fatigue des parents",{otite:2,varicelle:2.5,scarlatine:2,rhume:1.5,angine:1.5,bronchiolite:1.5,burnout:1.6}],
+  ["1220","1231","Fêtes de fin d'année","intoxications, accidents domestiques et coups de blues",{gastro:1.8,plaie:1.8,brulure:1.8,fracture:1.5,commotion:1.5,angoisse:1.5,depression:1.5}]];
+// La vraie météo de la ville choisie (Open-Meteo), mise à jour toutes les 30 minutes quand le jeu est ouvert
+var METEO_DELAI=30*MIN;
+var METEOS={
+  verglas:["Verglas","chutes et fractures en série",{fracture:2,femur:2,entorse:1.8,commotion:1.6,plaie:1.3}],
+  froid:["Grand froid","grippes et bronchites",{grippe:1.4,bronchite:1.4,pneumonie:1.3,infarctus:1.2}],
+  chaleur:["Forte chaleur","coups de chaleur et malaises",{chaleur:2.5,gastro:1.3,angoisse:1.2}],
+  pluie:["Pluie","plus d'accidents de la route",{fracture:1.3,commotion:1.3,plaie:1.2}],
+  brouillard:["Brouillard","accidents sur les routes",{fracture:1.4,commotion:1.4}]};
 var CRISES={
   epidemie:{nom:"Épidémie de grippe",txt:"Une épidémie de grippe frappe la ville. Une vingtaine de malades vont arriver en consultation dans les heures qui viennent.",
     choix:[["vaccin","Campagne de vaccination gratuite",3000,"Deux fois moins de malades, et la ville vous en est reconnaissante."],["tous","Accueillir tout le monde",0,"Vingt patients de plus : beaucoup de travail et de recettes."],["ailleurs","Les envoyer ailleurs",0,"Aucun patient de plus, mais votre réputation en souffre."]]},
@@ -570,7 +589,7 @@ function etatInitial(){
   return {v:V,nom:"",prenom:"Vincent",devise:"$",fondeLe:0,horloge:0,modif:0,jour:1,caisse:CAISSE_DEPART,palier:0,portes:false,
     ouverts:{consult:true,soins:true},lits:0,postes:postes,tarifs:tarifs,
     equipe:[],nEquipe:1,candidats:{},nCandidat:1,patients:[],nPatient:1,arrivees:[],evts:[],
-    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
+    avis:[55,55,55,55,55,55,55,55,55,55],soignes:0,stat:statVide(),diag:{ok:0,faux:0,auto:0,autoFaux:0},stock:{},commandes:[],materiel:{},demandes:[],nDemande:1,bareme:BAREME,demande:{},subventionEtat:1,bonusMoi:1,recherche:{ouvert:0,en:null,faits:{}},privees:0,dossiers:{},nDossier:1,rdv:{},ecole:0,avisPatients:[],greffe:{liste:[],offre:null,faites:0},connexion:{j:"",serie:0},ministre:null,fondation:{gala:null,dernier:0,total:0,galas:0},meteo:null,crise:null,panne:0,crisesGerees:0,serie:0,record:0,objectifs:{},histo:[],plaintes:[],nPlainte:1,bordereaux:[],contestes:[],nBord:1,immos:[],frac:{},valStock:{},medical:{complications:0,deces:0},pharma:{marge:MARGE_HABITUELLE,auto:true},
     registre:[],journal:[],cj:{},cm:{},prochaineCloture:0,
     moi:moiVide(),releve:0,prevus:0,decalage:0};
 }
@@ -608,6 +627,10 @@ function migrer(){
   if(!S.dossiers){
     S.dossiers={}; S.nDossier=1; S.rdv={}; S.ecole=0; S.avisPatients=[];
     if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : patients qui reviennent avec leur dossier, agenda des rendez-vous, école d'internes, avis des patients et notifications.");
+  }
+  if(!S.fondation){
+    S.fondation={gala:null,dernier:0,total:0,galas:0}; S.meteo=null;
+    if(S.fondeLe) noter(S.horloge||Date.now(),"ok","Nouveau : la fondation et ses galas de charité, les périodes de l'année (rentrée, fêtes, canicule…) et la vraie météo de votre ville (dans Aide et réglages).");
   }
   if(!S.greffe){
     S.greffe={liste:[],offre:null,faites:0}; S.connexion={j:"",serie:0}; S.ministre=null;
@@ -787,7 +810,21 @@ function testsEnCours(p,t){ var fin=0, k; for(k in p.tests) if(p.tests[k]>t&&p.t
 function coutTest(k){ var T=TESTS[k]; return T.imagerie||!T.cout?T.cout:Math.max(1,Math.round(T.cout*(1-0.2*niv("labo")))); }
 function saisonDe(t){ var m=new Date(t).getMonth(); return m===11||m<2?0:m<5?1:m<8?2:3; }
 // Le poids d'une maladie selon la saison ; une maladie propre à une saison n'existe pas le reste de l'année
-function poidsSaison(k,t){ var i=saisonDe(t), m=MALADIES[k]; if(m.saison!==undefined&&m.saison!==i) return 0; return SAISONS[i].m[k]||1; }
+function poidsSaison(k,t){ var i=saisonDe(t), m=MALADIES[k], P=periodeDe(t), M=meteoDe(); if(m.saison!==undefined&&m.saison!==i) return 0; return (SAISONS[i].m[k]||1)*(P&&P[4][k]||1)*(M&&M[2][k]||1); }
+function periodeDe(t){ var d=new Date(t), x=deux(d.getMonth()+1)+deux(d.getDate()), i; for(i=0;i<PERIODES.length;i++) if(x>=PERIODES[i][0]&&x<=PERIODES[i][1]) return PERIODES[i]; return null; }
+function meteoCle(){
+  var M=S.meteo&&S.meteo.cur, c;
+  if(!M||Date.now()-M.t>6*HEURE) return null;
+  c=M.code;
+  if(M.temp<=1&&(M.precip>0||M.neige>0||c===66||c===67||(c>=71&&c<=77)||c===85||c===86)) return "verglas";
+  if(M.temp>=28) return "chaleur";
+  if(c===45||c===48) return "brouillard";
+  if(M.precip>=1||(c>=61&&c<=65)||(c>=80&&c<=82)||c>=95) return "pluie";
+  if(M.temp<3) return "froid";
+  return null;
+}
+function meteoDe(){ var k=meteoCle(); return k?METEOS[k]:null; }
+function ciel(c){ return c===0?"ciel dégagé":c<=3?"nuageux":c===45||c===48?"brouillard":c<=57?"bruine":c<=67?"pluie":c<=77?"neige":c<=82?"averses":c<=86?"averses de neige":"orage"; }
 function tirerMaladie(liste,t){
   var total=0, r, i;
   liste.forEach(function(k){ total+=poidsSaison(k,t); });
@@ -1347,6 +1384,23 @@ function deciderGreffon(t,oui){
   noter(t,"ok","Greffon de "+ORGANES[o.organe]+" accepté : "+nomComplet(p)+" doit être "+(p.femme?"opérée":"opéré")+" dans les six heures.");
   affecter(t); return true;
 }
+function soireeGala(t){
+  var F=S.fondation, G=F.gala, total=0, top=null, venus=0;
+  F.gala=null; F.dernier=t; F.galas=(F.galas||0)+1;
+  G.pool.forEach(function(c){
+    var don;
+    if(!c.invite) return;
+    if(Math.random()<0.1) return;
+    venus++;
+    don=Math.round(c.fortune*(c.cause===G.cause?1:0.3)*(0.5+reputation()/100)*alea(0.6,1.2)/10)*10;
+    total+=don; if(!top||don>top.don) top={nom:nomComplet(c),don:don};
+  });
+  if(total) inscrire(t,"r:divers",total);
+  F.total=(F.total||0)+total;
+  if(venus){ avis(85); avis(85); }
+  noter(t,total?"ok":"warn","Gala de la fondation : "+pl(venus,"invité présent","invités présents")+", "+mt(total)+" récoltés"+(top?". Plus gros don : "+top.nom+" ("+mt(top.don)+")":"")+".");
+  notifier("Gala de la fondation",mt(total)+" récoltés.",t);
+}
 function criteresMinistre(){
   return [["Locaux propres",couvProprete()>=1],["Accueil assuré",couvAccueil()>=1],["Au moins deux soignants en poste",enPosteMaintenant()>=2],
     ["Pas plus de cinq patients qui attendent",aDiagnostiquer().length+enAttente().length<=5],["Aucun médicament en rupture",produitsConnus().every(function(k){ return stockDe(k)>0; })],
@@ -1503,6 +1557,7 @@ function avancer(jusqua){
     if(S.crise&&S.crise.limite<t){ t=S.crise.limite; quoi="crise"; }
     if(S.greffe&&S.greffe.offre&&S.greffe.offre.limite<t){ t=S.greffe.offre.limite; quoi="offre"; }
     if(S.ministre&&S.ministre.t<t){ t=S.ministre.t; quoi="ministre"; }
+    if(S.fondation&&S.fondation.gala&&S.fondation.gala.t<t){ t=S.fondation.gala.t; quoi="gala"; }
     for(i=0;i<S.patients.length;i++){
       p=S.patients[i];
       if(p.etat==="diag"){ if(p.auto&&p.auto<=p.limite&&qualiteRelais(p)>0){ e=p.auto; q="relais"; } else { e=p.limite; q="depart"; } a=testsEnCours(p,S.horloge); if(a&&a<e){ e=a; q="resultat"; } }
@@ -1525,6 +1580,7 @@ function avancer(jusqua){
     else if(quoi==="crise") resoudreCrise(t,null);
     else if(quoi==="offre") deciderGreffon(t,null);
     else if(quoi==="ministre") visiteMinistre(t);
+    else if(quoi==="gala") soireeGala(t);
     else if(quoi==="livraison"){ a=S.commandes.shift(); S.stock[a.p]=stockDe(a.p)+a.n; S.valStock[a.p]=(S.valStock[a.p]||0)+(a.v===undefined?PRODUITS[a.p].cout*a.n:a.v); }
     else if(quoi==="releve"){ S.releve=prochaineReleve(t+1000); affecter(t); }
     else if(quoi==="aggrave"){ aggraver(qui,t); affecter(t); }
@@ -1671,7 +1727,7 @@ function ecranAccueil(){
   if(r) bloc='<div class="carte"><div class="carte-haut"><h3>Pendant votre absence<small>'+dureeTxt(r.duree)+'</small></h3><button type="button" class="btn petit" data-a="resume">Fermer</button></div>'
     +'<p>'+pl(r.soignes,"patient soigné","patients soignés")+'. Caisse : <b class="'+(r.caisse>=0?"plus-c":"moins-c")+'">'+signeM(r.caisse)+'</b>. Réputation : '+(r.rep>0?"+":r.rep<0?"−":"")+Math.abs(r.rep)+' '+(Math.abs(r.rep)>1?"points":"point")+'.</p></div>';
   return barre()
-    +'<div class="titre"><h1>'+h(S.nom)+'</h1><p>'+PALIERS[S.palier].nom+' · jour '+S.jour+' · '+SAISONS[saisonDe(maintenant())].nom+' · Directeur : '+h(S.prenom)+'</p></div>'
+    +'<div class="titre"><h1>'+h(S.nom)+'</h1><p>'+PALIERS[S.palier].nom+' · jour '+S.jour+' · '+SAISONS[saisonDe(maintenant())].nom+(S.meteo&&S.meteo.cur?' · '+Math.round(S.meteo.cur.temp)+' °C à '+h(S.meteo.ville):"")+' · Directeur : '+h(S.prenom)+'</p></div>'
     +'<div class="jauges">'
     +jauge("Caisse",mt(S.caisse),S.caisse<0?"n0":"",null,"Aujourd'hui "+signeM(jr))
     +jauge("Réputation",rep+" / 100",rep>=65?"n2":rep<40?"n0":"",rep,libReputation(rep))
@@ -1683,6 +1739,7 @@ function ecranAccueil(){
     +'<p class="aide">'+(S.portes?(pro?"Prochain patient attendu "+(cleJour(pro)===cleJour(maintenant())?"vers ":"demain vers ")+heureTxt(pro)+".":"Plus de patient prévu aujourd'hui."):"Le cabinet n'a pas encore ouvert ses portes.")+'</p></div>'
     +bloc
     +bonusHtml()
+    +calendrierHtml()
     +criseHtml()
     +greffonHtml()
     +ministreHtml()
@@ -1699,6 +1756,7 @@ function ecranAccueil(){
     +tuile("g4","flacon","Recherche",S.palier<RECHERCHE_PALIER?"Palier "+PALIERS[RECHERCHE_PALIER].nom:!S.recherche.ouvert?"À construire":S.recherche.en?"Étude en cours":pl(Object.keys(S.recherche.faits).length,"étude terminée","études terminées"),"recherche")
     +tuile("g3","calendrier","Agenda",pl(S.arrivees.filter(function(a){ return a.rdv&&a.t>maintenant(); }).length,"rendez-vous","rendez-vous")+" à venir","agenda")
     +tuile("g5","etoile","Avis",(S.avisPatients||[]).length?((S.avisPatients.reduce(function(n,a){ return n+a.e; },0)/S.avisPatients.length).toFixed(1).replace(".",",")+" / 5"):"Aucun avis","avispat")
+    +tuile("g8","coeur","Fondation",S.fondation&&S.fondation.gala?"Gala "+(cleJour(S.fondation.gala.t)===cleJour(maintenant())?"ce soir":dateCourte(S.fondation.gala.t)):"Galas de charité","fondation")
     +tuile("g5","coupe","Objectifs",OBJECTIFS.filter(function(o){ return S.objectifs&&S.objectifs[o[0]]; }).length+" sur "+OBJECTIFS.length+" atteints","objectifs")
     +tuile("g1","finances","Statistiques",(S.histo||[]).length?pl(S.histo.length,"jour suivi","jours suivis"):"Dès cette nuit","stats")
     +tuile("g5","tarifs","Tarifs","Consultation : "+mt(S.tarifs.consult),"tarifs")
@@ -1708,6 +1766,12 @@ function ecranAccueil(){
     +'</div>'
     +palierHtml()
     +'<button type="button" class="btn" data-a="aller" data-e="reglages">'+I.reglages+'Aide et réglages</button>';
+}
+function calendrierHtml(){
+  var P=periodeDe(maintenant()), M=meteoDe(), l=[];
+  if(P) l.push('<div class="alerte"><span><b>'+P[2]+'</b> : '+P[3]+'.</span></div>');
+  if(M) l.push('<div class="alerte warn"><span><b>Météo : '+M[0].toLowerCase()+'</b> à '+h(S.meteo.ville)+' ('+Math.round(S.meteo.cur.temp)+' °C, '+ciel(S.meteo.cur.code)+') : '+M[1]+'.</span></div>');
+  return l.length?'<div class="alertes">'+l.join("")+'</div>':"";
 }
 function bonusHtml(){
   var b=U.bonus, i, pts="";
@@ -2077,6 +2141,26 @@ function ecranAvis(){
       +'<div class="bloc"><h2>Derniers avis</h2><ul class="liste">'+l.slice(0,20).map(function(a){ return '<li class="rang"><div><b>'+h(a.nom)+'</b> '+etoiles(a.e)+'<small>« '+h(a.txt)+' »</small><small>'+SERVICES[a.sv].nom+' · '+quandTxt(a.t)+'</small></div></li>'; }).join("")+'</ul></div>'
       :'<p class="vide">Les patients laissent un avis en repartant.</p>');
 }
+function ecranFondation2(){
+  var F=S.fondation, G=F.gala, t=maintenant(), attente=F.dernier&&t-F.dernier<PAUSE_GALA*JOUR, n, nomCause;
+  var haut=barre()+entete("Fondation",(F.galas?pl(F.galas,"gala","galas")+" · "+mt(F.total||0)+" récoltés":"Galas de charité au profit de l'hôpital"));
+  if(G){
+    n=G.pool.filter(function(x){ return x.invite; }).length; nomCause=CAUSES.filter(function(x){ return x[0]===G.cause; })[0][1];
+    return haut+'<div class="carte"><div class="carte-haut"><h3>'+GALAS.filter(function(x){ return x[0]===G.taille; })[0][1]+'<small>'+dateLongue(G.t)+' à 20 h · au profit de « '+nomCause.toLowerCase()+' »</small></h3><span class="puce info num">dans <span data-reste="'+G.t+'">'+resteTxt(G.t)+'</span></span></div>'
+      +'<p class="aide">Invitez jusqu\'à '+G.max+' donateurs ('+n+' pour l\'instant). Ceux qui tiennent à la même cause donnent beaucoup plus ; une bonne réputation fait ouvrir les portefeuilles. Environ un invité sur dix ne vient pas.</p></div>'
+      +'<ul class="liste">'+G.pool.map(function(c,i){
+        var ok=c.cause===G.cause;
+        return '<li class="rang"><div><b>'+h(nomComplet(c))+'</b><small>'+c.titre+' · tient à « '+CAUSES.filter(function(x){ return x[0]===c.cause; })[0][1].toLowerCase()+' »</small><small>Peut donner jusqu\'à '+mt(c.fortune)+'</small></div>'
+          +'<div class="droite">'+(ok?'<span class="puce ok">Même cause</span>':"")+'<button type="button" class="btn petit'+(c.invite?" principal":"")+'" data-a="inviter" data-k="'+i+'"'+(!c.invite&&n>=G.max?" disabled":"")+'>'+(c.invite?"Invité ✓":"Inviter")+'</button></div></li>';
+      }).join("")+'</ul>';
+  }
+  if(attente) return haut+'<p class="vide">Le prochain gala pourra être organisé dans <span data-reste="'+(F.dernier+PAUSE_GALA*JOUR)+'">'+resteTxt(F.dernier+PAUSE_GALA*JOUR)+'</span>. Les donateurs n\'aiment pas être sollicités trop souvent.</p>';
+  return haut+'<p class="aide">Organisez un gala de charité : il a lieu deux jours plus tard, à 20 h. Choisissez d\'abord la cause, puis la taille de la soirée. Ensuite, invitez les donateurs.</p>'
+    +'<div class="carte"><h2>La cause</h2><div class="puces-choix">'+CAUSES.map(function(c){ return '<button type="button" class="choix'+(U.cause===c[0]?" actif":"")+'" data-a="cause" data-k="'+c[0]+'">'+c[1]+'</button>'; }).join("")+'</div></div>'
+    +'<div class="bloc"><h2>La soirée</h2>'+GALAS.map(function(g){
+      return '<div class="carte"><div class="carte-haut"><h3>'+g[1]+'<small>Jusqu\'à '+g[3]+' invités · organisation '+mt(g[2])+'</small></h3><button type="button" class="btn principal petit" data-a="gala" data-k="'+g[0]+'"'+(U.cause&&S.caisse>=g[2]?"":" disabled")+'>Organiser</button></div></div>';
+    }).join("")+(U.cause?"":'<p class="aide">Choisissez une cause pour pouvoir organiser la soirée.</p>')+'</div>';
+}
 function ecranTarifs(){
   return barre()+entete("Tarifs","Vos prix, et ce qu'il en reste à payer au patient.")
     +'<p class="aide">Aucun patient ne refuse votre prix. La mutuelle rembourse une somme fixe, 60 % du prix habituel ; le reste est payé par le patient. Mais un service cher se fait une réputation : il y vient peu à peu moins de monde. Un service bon marché en attire davantage.</p>'
@@ -2216,6 +2300,12 @@ function ecranReglages(){
   var etat=nuage.ref?"Votre partie est enregistrée sur votre compte : vous la retrouvez sur votre téléphone comme sur votre ordinateur.":"Votre partie est enregistrée sur cet appareil.";
   return barre()+entete("Aide et réglages","")
     +'<div class="carte"><h2>Sauvegarde</h2><p>'+etat+'</p></div>'
+    +'<div class="carte"><h2>Météo</h2><p class="aide">Le temps qu\'il fait vraiment dans votre ville change les maladies : verglas, chaleur, pluie, brouillard, grand froid.</p>'
+      +(S.meteo&&S.meteo.ville?'<p>'+h(S.meteo.ville)+(S.meteo.cur?' · '+Math.round(S.meteo.cur.temp)+' °C, '+ciel(S.meteo.cur.code):"")+'</p>':"")
+      +'<div class="champ"><label for="f-ville">'+(S.meteo&&S.meteo.ville?"Changer de ville":"Votre ville")+'</label><input type="text" id="f-ville" maxlength="40" autocomplete="off" value="'+h(U.ville||"")+'"></div>'
+      +'<div class="actions"><button type="button" class="btn principal" data-a="ville">Chercher</button>'+(S.meteo?'<button type="button" class="btn" data-a="sansmeteo">Ne plus utiliser la météo</button>':"")+'</div>'
+      +(meteoMsg?'<p class="aide">'+h(meteoMsg)+'</p>':"")
+      +(meteoChoix&&meteoChoix.length?'<ul class="liste">'+meteoChoix.map(function(x,i){ return '<li class="rang"><div><b>'+h(x.ville)+'</b><small>'+h([x.region,x.pays].filter(Boolean).join(", "))+'</small></div><div class="droite"><button type="button" class="btn petit principal" data-a="choixville" data-k="'+i+'">Choisir</button></div></li>'; }).join("")+'</ul>':"")+'</div>'
     +'<div class="carte"><h2>Notifications</h2><p class="aide">Une alerte sur le téléphone quand une crise commence, quand un objectif est atteint ou quand un patient porte plainte. Elles marchent dans l\'appli installée sur l\'écran d\'accueil, tant qu\'elle est ouverte ou en arrière-plan : quand l\'appli est complètement fermée, l\'iPhone ne la laisse pas prévenir.</p><div class="actions">'+(!("Notification" in window)?'<span class="aide">Pas disponible dans cette version : ouvrez l\'appli installée sur votre téléphone.</span>':Notification.permission==="denied"?'<span class="aide">Refusées sur cet appareil : autorisez-les dans les réglages du téléphone (Notifications, MyHospital).</span>':'<button type="button" class="btn'+(lireNotif()?"":" principal")+'" data-a="notif">'+(lireNotif()?"Désactiver":"Activer les notifications")+'</button>'+(lireNotif()?'<span class="puce ok">Activées</span>':""))+'</div></div>'
     +'<div class="carte"><h2>Les règles en bref</h2>'
     +'<p class="aide"><b>Temps réel.</b> Une consultation dure 20 vraies minutes, une opération 1 h 30. L\'hôpital continue de tourner quand le jeu est fermé.</p>'
@@ -2380,6 +2470,30 @@ var A={
     noter(t,"","Étude lancée : « "+e[1]+" » ("+mt(e[2])+"). Résultats dans "+e[3]+" jours.");
     return true;
   },
+  ville:function(){ chercherVille((U.ville||"").trim()); return false; },
+  choixville:function(d){ var x=meteoChoix&&meteoChoix[+d.k]; if(!x) return false; S.meteo={ville:x.ville,lat:x.lat,lon:x.lon,cur:null}; meteoChoix=null; meteoMsg=""; U.ville=""; majMeteo(true); return true; },
+  sansmeteo:function(){ S.meteo=null; if(S.portes) replanifier(maintenant()); return true; },
+  gala:function(d){
+    var g=GALAS.filter(function(x){ return x[0]===d.k; })[0], F=S.fondation, t=maintenant(), i, n, c;
+    if(!g||F.gala||t-F.dernier<PAUSE_GALA*JOUR||S.caisse<g[2]||!U.cause) return false;
+    inscrire(t,"e:divers",g[2]);
+    F.gala={taille:g[0],cause:U.cause,t:minuit(t+DELAI_GALA*JOUR+2*HEURE)+20*HEURE,max:g[3],pool:[]};
+    for(i=0;i<g[3]*2;i++){
+      c=identite(Math.random()<0.5); c.cause=Math.random()<0.4?U.cause:tirer(CAUSES)[0]; c.fortune=entre(5,40)*100*(S.palier+1); c.id=i; c.invite=0;
+      c.titre=tirer(["Industriel","Banquière","Ancien patient","Mécène","Héritière","Chef d'entreprise","Notaire","Sportif retraité","Collectionneuse d'art"]);
+      F.gala.pool.push(c);
+    }
+    noter(t,"ok",g[1]+" organisé pour "+dateLongue(F.gala.t)+" à 20 h, au profit de « "+CAUSES.filter(function(x){ return x[0]===U.cause; })[0][1].toLowerCase()+" ». Invitez vos donateurs dans Fondation.");
+    return true;
+  },
+  cause:function(d){ U.cause=d.k; return false; },
+  inviter:function(d){
+    var G=S.fondation.gala, c=G&&G.pool[+d.k], n;
+    if(!c) return false;
+    n=G.pool.filter(function(x){ return x.invite; }).length;
+    if(!c.invite&&n>=G.max) return false;
+    c.invite=c.invite?0:1; return true;
+  },
   greffon:function(d){ return deciderGreffon(maintenant(),d.k==="1"); },
   finbonus:function(){ U.bonus=null; return false; },
   rdv:function(d){
@@ -2522,7 +2636,7 @@ function revenir(){
 
 /* ------------------------------------------------------------------ Boucle */
 var app=document.getElementById("app"), dernier="", dernierBattement=Date.now();
-var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
+var ECRANS={accueil:ecranAccueil,patients:ecranPatients,dossier:ecranDossier,maladies:ecranMaladies,pharmacie:ecranPharmacie,planning:ecranPlanning,materiel:ecranMateriel,recherche:ecranRecherche,objectifs:ecranObjectifs,stats:ecranStats,agenda:ecranAgenda,avispat:ecranAvis,fondation:ecranFondation2,equipe:ecranEquipe,recrutement:ecranRecrutement,services:ecranServices,tarifs:ecranTarifs,finances:ecranFinances,journal:ecranJournal,moi:ecranMoi,reglages:ecranReglages};
 function rendre(){
   var y=window.scrollY, cle=S.fondeLe?U.ecran:"fondation";
   app.innerHTML='<div class="ecran">'+(S.fondeLe?(ECRANS[U.ecran]||ecranAccueil)():ecranFondation())+'</div>'+(S.fondeLe?navigation():"");
@@ -2540,6 +2654,30 @@ function resumer(avant){
   var d=maintenant()-avant.t;
   if(d<HEURE) return;
   U.resume={duree:d,soignes:S.soignes-avant.soignes,caisse:Math.round(S.caisse-avant.caisse),rep:Math.round(reputation()-avant.rep)};
+}
+var meteoOcc=false, meteoChoix=null, meteoMsg="";
+function majMeteo(force){
+  var M=S.meteo, avant;
+  if(!M||!M.lat||meteoOcc||typeof fetch!=="function") return;
+  if(!force&&M.cur&&Date.now()-M.cur.t<METEO_DELAI) return;
+  meteoOcc=true; avant=meteoCle();
+  fetch("https://api.open-meteo.com/v1/forecast?latitude="+M.lat+"&longitude="+M.lon+"&current=temperature_2m,precipitation,snowfall,weather_code&timezone=auto")
+    .then(function(r){ return r.json(); }).then(function(d){
+      var c=d&&d.current; meteoOcc=false;
+      if(!c) return;
+      S.meteo.cur={t:Date.now(),temp:c.temperature_2m,precip:c.precipitation||0,neige:c.snowfall||0,code:c.weather_code};
+      if(meteoCle()!==avant&&S.portes) replanifier(maintenant());
+      marquer(); rendre();
+    },function(){ meteoOcc=false; });
+}
+function chercherVille(nom){
+  if(!nom||typeof fetch!=="function") return;
+  meteoMsg="Recherche…"; meteoChoix=null; rendre();
+  fetch("https://geocoding-api.open-meteo.com/v1/search?count=5&language=fr&name="+encodeURIComponent(nom))
+    .then(function(r){ return r.json(); }).then(function(d){
+      meteoChoix=(d&&d.results||[]).map(function(x){ return {ville:x.name,pays:x.country||"",region:x.admin1||"",lat:x.latitude,lon:x.longitude}; });
+      meteoMsg=meteoChoix.length?"":"Aucune ville trouvée."; rendre();
+    },function(){ meteoMsg="Météo indisponible ici : essayez dans l'appli du téléphone."; rendre(); });
 }
 function bonusQuotidien(){
   var n=Date.now(), j=cleJour(n), C=S.connexion, m;
@@ -2559,6 +2697,7 @@ function battement(retour){
   paye=activite(ecoule);
   change=avancer(maintenant());
   if(bonusQuotidien()) change=true;
+  majMeteo(false);
   if(retour) resumer(avant);
   if(change||paye){ marquer(); rendre(); } else if(retour) rendre(); else tic();
   pousser(false);
@@ -2596,6 +2735,7 @@ document.addEventListener("pointerdown",lireCourbe);
 document.addEventListener("input",function(ev){
   if(ev.target.id==="f-nom") U.fond.nom=ev.target.value;
   if(ev.target.id==="f-prenom") U.fond.prenom=ev.target.value;
+  if(ev.target.id==="f-ville") U.ville=ev.target.value;
 });
 document.addEventListener("visibilitychange",function(){
   if(document.hidden){ sauver(); pousser(true); } else { dernierBattement=Date.now(); revenir(); }
